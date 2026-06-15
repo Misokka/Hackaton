@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
+import { BadRequestException, HttpException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { RegisterUserDto } from "./dtos/register-user.dto";
 import { PrismaService } from "src/prisma/prisma.service";
 import argon2 from "argon2";
@@ -34,12 +34,16 @@ export class AuthService {
       }
     });
 
-    const {password, ...userWithoutPassword} = newUser
+   const {password, ...userWithoutPassword} = newUser
     return {
       message: "Compte crée avec succès",
       user: userWithoutPassword
     }
    } catch (error: any) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       throw new InternalServerErrorException(`Une erreur est survenue lors de l'enregistrement de l'utilisateur: ${error.message}`)
    }
   }
