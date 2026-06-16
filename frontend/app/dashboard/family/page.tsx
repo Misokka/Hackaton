@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/atoms/Button";
 import { InfoBox } from "@/components/molecules/InfoBox";
 import { ProfileSummaryCard } from "@/components/molecules/ProfileSummaryCard";
+import { getMyHousehold } from "@/lib/api/households";
 import type { RegisterFamilyResponse } from "@/lib/api/types";
 
 const fallback: RegisterFamilyResponse = {
@@ -47,7 +48,7 @@ const fallback: RegisterFamilyResponse = {
 };
 
 export default function FamilyDashboardPage() {
-  const [data] = useState<RegisterFamilyResponse>(() => {
+  const [data, setData] = useState<RegisterFamilyResponse>(() => {
     if (typeof window === "undefined") return fallback;
 
     const stored = sessionStorage.getItem("familyRegisterResult");
