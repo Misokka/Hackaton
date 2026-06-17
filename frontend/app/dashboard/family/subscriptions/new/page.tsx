@@ -21,6 +21,10 @@ import { titleOffersMock } from "@/lib/demo/titleOffersMock";
 
 const steps = ["Porteur", "Offre", "Dossier", "Confirmation"];
 
+function isImagineROffer(offer: ProductOffer | undefined) {
+  return offer?.productType === "IMAGINE_R_JUNIOR" || offer?.productType === "IMAGINE_R_SCHOOL";
+}
+
 function preferredOfferForMember(member: DashboardMember | undefined, offers: ProductOffer[]) {
   if (!member) {
     return offers[0];
@@ -90,6 +94,14 @@ function SubscriptionNewContent() {
     [offers, selectedMember, selectedOfferId],
   );
   const payerMember = data.members.find((member) => member.id === payerMemberId) ?? data.members.find((member) => member.id === data.manager.id);
+
+  useEffect(() => {
+    if (isLoading || !selectedMember || !selectedOffer || !isImagineROffer(selectedOffer)) {
+      return;
+    }
+
+    router.replace(`/dashboard/family/subscriptions/imagine-r/new?memberId=${selectedMember.id}&offerId=${selectedOffer.id}`);
+  }, [isLoading, router, selectedMember, selectedOffer]);
 
   function handleNext() {
     setStep((current) => Math.min(current + 1, steps.length - 1));

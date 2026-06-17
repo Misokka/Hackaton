@@ -9,6 +9,10 @@ type FamilyAlertsSectionProps = {
 };
 
 function getNotificationHref(notification: DashboardNotification) {
+  if (notification.subscriptionRequest) {
+    return `/dashboard/family/subscriptions/${notification.subscriptionRequest.id}/confirmation`;
+  }
+
   if (!notification.memberId) {
     return "/dashboard/family?tab=help";
   }
@@ -21,6 +25,10 @@ function getNotificationHref(notification: DashboardNotification) {
 }
 
 function getNotificationActionLabel(notification: DashboardNotification) {
+  if (notification.subscriptionRequest) {
+    return "Voir l'état de ma demande";
+  }
+
   if (notification.type === "RENEWAL") {
     return "Renouveler";
   }

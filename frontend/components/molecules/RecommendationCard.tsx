@@ -12,6 +12,10 @@ type RecommendationCardProps = {
 
 export function RecommendationCard({ memberId, recommendation }: RecommendationCardProps) {
   const offer = recommendation.recommendedOffer;
+  const subscriptionHref =
+    offer.productType === "IMAGINE_R_JUNIOR" || offer.productType === "IMAGINE_R_SCHOOL"
+      ? `/dashboard/family/subscriptions/imagine-r/new?memberId=${memberId}&offerId=${offer.id}`
+      : `/dashboard/family/subscriptions/new?memberId=${memberId}&offerId=${offer.id}`;
 
   return (
     <article className="rounded-3xl border border-idfm-medium bg-white p-6 shadow-sm">
@@ -38,7 +42,7 @@ export function RecommendationCard({ memberId, recommendation }: RecommendationC
           <h3 className="font-bold text-idfm-anthracite">Pourquoi cette offre ?</h3>
           <p className="mt-2 text-sm leading-6 text-neutral-medium">{offer.shortDescription}</p>
           <Link
-            href={`/dashboard/family/subscriptions/new?memberId=${memberId}&offerId=${offer.id}`}
+            href={subscriptionHref}
             className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
           >
             {recommendation.nextAction}

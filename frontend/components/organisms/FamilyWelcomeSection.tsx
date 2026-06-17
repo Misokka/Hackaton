@@ -42,6 +42,10 @@ function getDisplayProduct(member: DashboardMember) {
 }
 
 function getMemberActionHref(member: DashboardMember) {
+  if (member.pendingRequest) {
+    return `/dashboard/family/subscriptions/${member.pendingRequest.id}/confirmation`;
+  }
+
   if (member.profileType === "YOUNG") {
     return `/dashboard/family/titles/recommendation?memberId=${member.id}`;
   }
@@ -65,6 +69,17 @@ function buildPriorityAction(data: HouseholdDashboardResponse): PriorityAction {
       description: "Ajoutez un enfant, un senior ou un proche pour préparer les démarches du foyer.",
       href: "/dashboard/family?tab=profiles",
       title: "Complétez votre foyer",
+    };
+  }
+
+  if (targetMember.pendingRequest) {
+    return {
+      badge: "En cours",
+      cta: "Voir l'état",
+      description: "La demande est enregistrée. Vous pouvez suivre la vérification du dossier.",
+      href: getMemberActionHref(targetMember),
+      member: targetMember,
+      title: `${targetMember.firstName} — demande ${targetMember.pendingRequest.offerName}`,
     };
   }
 

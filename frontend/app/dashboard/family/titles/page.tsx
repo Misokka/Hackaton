@@ -28,7 +28,7 @@ function buildSummaryItems(data: HouseholdDashboardResponse) {
 }
 
 function getMemberTitleStatus(member: HouseholdDashboardResponse["members"][number]) {
-  if (member.status === "PENDING_DOCUMENT") {
+  if (member.pendingRequest || member.status === "PENDING_DOCUMENT") {
     return "Demande en cours";
   }
 
@@ -37,6 +37,30 @@ function getMemberTitleStatus(member: HouseholdDashboardResponse["members"][numb
   }
 
   return member.profileType === "MANAGER" ? "Aucun titre rattache" : "Offre a choisir";
+}
+
+function getRequestStatusLabel(status: NonNullable<HouseholdDashboardResponse["members"][number]["pendingRequest"]>["status"]) {
+  if (status === "DRAFT") {
+    return "Brouillon";
+  }
+
+  if (status === "WAITING_DOCUMENTS") {
+    return "Justificatifs attendus";
+  }
+
+  if (status === "UNDER_REVIEW") {
+    return "En vérification";
+  }
+
+  if (status === "PAYMENT_PENDING") {
+    return "Paiement à confirmer";
+  }
+
+  if (status === "CONFIRMED") {
+    return "Confirmée";
+  }
+
+  return "En cours";
 }
 
 function FamilyTitlesContent() {
@@ -65,6 +89,7 @@ function FamilyTitlesContent() {
 
   const data = state?.dashboard ?? familyDashboardMock;
   const offers = state?.offers ?? titleOffersMock;
+  const pendingMembers = data.members.filter((member) => member.pendingRequest);
 
   return (
     <DashboardLayout
@@ -103,6 +128,52 @@ function FamilyTitlesContent() {
         </section>
 
         <section>
+          {pendingMembers.length ? (
+            <div className="mb-10">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-idfm-anthracite">Demandes en attente</h2>
+                  <p className="mt-1 text-sm text-neutral-medium">
+                    Suivez les dossiers envoyés avant qu'un titre soit rattaché au foyer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                {pendingMembers.map((member) => {
+                  const request = member.pendingRequest;
+
+                  if (!request) {
+                    return null;
+                  }
+
+                  return (
+                    <article key={request.id} className="flex h-full flex-col rounded-2xl border border-status-warning bg-orange-50 p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold text-idfm-anthracite">
+                            {member.firstName} {member.lastName}
+                          </h3>
+                          <p className="mt-1 text-sm text-neutral-medium">{request.offerName}</p>
+                        </div>
+                        <Badge tone="orange">{getRequestStatusLabel(request.status)}</Badge>
+                      </div>
+                      <p className="mt-4 flex-1 text-sm leading-6 text-neutral-medium">
+                        Dossier {request.requestNumber ?? "enregistré"} : les informations et justificatifs peuvent être suivis depuis votre espace.
+                      </p>
+                      <Link
+                        href={`/dashboard/family/subscriptions/${request.id}/confirmation`}
+                        className="mt-5 inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
+                      >
+                        Voir l'état de ma demande
+                      </Link>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold text-idfm-anthracite">Titres du foyer</h2>
@@ -113,32 +184,40 @@ function FamilyTitlesContent() {
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
-            {data.members.map((member) => (
-              <article key={member.id} className="flex h-full flex-col rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-idfm-anthracite">
-                      {member.firstName} {member.lastName}
-                    </h3>
-                    <p className="mt-1 text-sm text-neutral-medium">{member.relationLabel}</p>
+            {data.members.map((member) => {
+              const actionHref = member.pendingRequest
+                ? `/dashboard/family/subscriptions/${member.pendingRequest.id}/confirmation`
+                : `/dashboard/family/titles/recommendation?memberId=${member.id}`;
+
+              return (
+                <article key={member.id} className="flex h-full flex-col rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-idfm-anthracite">
+                        {member.firstName} {member.lastName}
+                      </h3>
+                      <p className="mt-1 text-sm text-neutral-medium">{member.relationLabel}</p>
+                    </div>
+                    <Badge tone={member.pendingRequest || member.status === "PENDING_DOCUMENT" ? "orange" : "blue"}>
+                      {getMemberTitleStatus(member)}
+                    </Badge>
                   </div>
-                  <Badge tone={member.status === "PENDING_DOCUMENT" ? "orange" : "blue"}>
-                    {getMemberTitleStatus(member)}
-                  </Badge>
-                </div>
-                <p className="mt-4 flex-1 text-sm leading-6 text-neutral-medium">
-                  {member.recommendedProduct
-                    ? `Offre reperee : ${member.recommendedProduct}`
-                    : "Aucun titre rattache pour le moment."}
-                </p>
-                <Link
-                  href={`/dashboard/family/titles/recommendation?memberId=${member.id}`}
-                  className="mt-5 inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
-                >
-                  {member.status === "PENDING_DOCUMENT" ? "Voir la demande" : "Trouver une offre"}
-                </Link>
-              </article>
-            ))}
+                  <p className="mt-4 flex-1 text-sm leading-6 text-neutral-medium">
+                    {member.pendingRequest
+                      ? `${member.pendingRequest.offerName} — ${getRequestStatusLabel(member.pendingRequest.status)}.`
+                      : member.recommendedProduct
+                        ? `Offre reperee : ${member.recommendedProduct}`
+                        : "Aucun titre rattache pour le moment."}
+                  </p>
+                  <Link
+                    href={actionHref}
+                    className="mt-5 inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
+                  >
+                    {member.pendingRequest ? "Voir l'état de ma demande" : "Trouver une offre"}
+                  </Link>
+                </article>
+              );
+            })}
           </div>
         </section>
 

@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { DocumentType } from "@prisma/client";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request.dto";
+import { CreateImagineRDraftDto, UpdateImagineRRequestDto } from "./dtos/imagine-r-subscription-request.dto";
 import { UpdateSubscriptionRequestDto } from "./dtos/update-subscription-request.dto";
 
 @Injectable()
@@ -24,6 +26,7 @@ export class SubscriptionRequestsService {
     documents: {
       orderBy: { createdAt: "asc" as const },
     },
+    addresses: true,
   };
 
   private buildTimeline(status: string) {
@@ -50,30 +53,31 @@ export class SubscriptionRequestsService {
     }));
   }
 
-  private formatRequest(request: {
-    id: string;
-    status: string;
-    autoRenewalEnabled: boolean;
-    intelligentDossierEnabled: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-    household: { id: string; name: string; owner: { firstName: string; lastName: string } };
-    member: { id: string; firstName: string; lastName: string; profileType: string; relationship: string };
-    payerMember: { id: string; firstName: string; lastName: string } | null;
-    offer: {
-      id: string;
-      slug: string;
-      name: string;
-      productType: string;
-      shortDescription: string;
-      priceLabel: string;
-      durationLabel: string;
-      requiredDocuments: Array<{ id: string; documentType: string; label: string; required: boolean }>;
-    };
-    documents: Array<{ id: string; documentType: string; label: string; status: string; rejectionReason: string | null }>;
-  }) {
+  private formatDate(date: Date | string | null | undefined) {
+    return date ? new Date(date).toISOString() : null;
+  }
+
+  private formatRequest(request: any) {
+    const addresses = Object.fromEntries(
+      (request.addresses ?? []).map((address: any) => [
+        address.type.toLowerCase(),
+        {
+          id: address.id,
+          street: address.street,
+          addressLine1: address.addressLine1,
+          addressLine2: address.addressLine2,
+          addressLine3: address.addressLine3,
+          postalCode: address.postalCode,
+          city: address.city,
+          country: address.country,
+        },
+      ]),
+    );
+
     return {
       id: request.id,
+      requestNumber: request.requestNumber,
+      flowType: request.flowType,
       status: request.status,
       autoRenewalEnabled: request.autoRenewalEnabled,
       intelligentDossierEnabled: request.intelligentDossierEnabled,
@@ -116,8 +120,84 @@ export class SubscriptionRequestsService {
         label: document.label,
         status: document.status,
         rejectionReason: document.rejectionReason,
+        simulatedFileName: document.simulatedFileName,
+        simulatedMimeType: document.simulatedMimeType,
+        simulatedSizeBytes: document.simulatedSizeBytes,
+        uploadedAt: this.formatDate(document.uploadedAt),
       })),
+      imagineR:
+        request.flowType === "IMAGINE_R"
+          ? {
+              hasPreviousImagineR: request.hasPreviousImagineR,
+              hasCustomerNumber: request.hasCustomerNumber,
+              customerNumber: request.customerNumber,
+              infoCertificationAccepted: request.infoCertificationAccepted,
+              holderAddressSameAsPayer: request.holderAddressSameAsPayer,
+              payerBirthDate: this.formatDate(request.payerBirthDate),
+              schoolZipOrCity: request.schoolZipOrCity,
+              schoolName: request.schoolName,
+              schoolLevel: request.imagineRSchoolLevel,
+              scholarshipStatus: request.scholarshipStatus,
+              forfaitStartDate: this.formatDate(request.forfaitStartDate),
+              validityStartDate: this.formatDate(request.validityStartDate),
+              validityEndDate: this.formatDate(request.validityEndDate),
+              deliveryMode: request.deliveryMode,
+              baseAmountCents: request.baseAmountCents,
+              feeAmountCents: request.feeAmountCents,
+              totalAmountCents: request.totalAmountCents,
+              currency: request.currency,
+              signatureInformationAccepted: request.signatureInformationAccepted,
+              signaturePayerAccepted: request.signaturePayerAccepted,
+              signatureTermsAccepted: request.signatureTermsAccepted,
+              signatureDocumentsAccepted: request.signatureDocumentsAccepted,
+              signedAt: this.formatDate(request.signedAt),
+              paymentSimulatedAt: this.formatDate(request.paymentSimulatedAt),
+              submittedAt: this.formatDate(request.submittedAt),
+              addresses,
+            }
+          : null,
       timeline: this.buildTimeline(request.status),
+    };
+  }
+
+  private isImagineROffer(productType: string) {
+    return productType === "IMAGINE_R_JUNIOR" || productType === "IMAGINE_R_SCHOOL";
+  }
+
+  private buildImagineRAmounts(productType: string) {
+    const baseAmountCents = productType === "IMAGINE_R_JUNIOR" ? 1720 : 39330;
+    const feeAmountCents = 800;
+
+    return {
+      baseAmountCents,
+      feeAmountCents,
+      totalAmountCents: baseAmountCents + feeAmountCents,
+    };
+  }
+
+  private buildImagineRRequiredDocuments(productType: string, documents: Array<{ documentType: DocumentType; label: string }>) {
+    const documentMap = new Map(documents.map((document) => [document.documentType, document.label]));
+
+    documentMap.set("PHOTO", documentMap.get("PHOTO") ?? "Photo du titulaire");
+    documentMap.set("ID_DOCUMENT", documentMap.get("ID_DOCUMENT") ?? "Justificatif d'identité");
+
+    if (productType === "IMAGINE_R_SCHOOL") {
+      documentMap.set("SCHOOL_CERTIFICATE", documentMap.get("SCHOOL_CERTIFICATE") ?? "Certificat scolaire");
+    }
+
+    return Array.from(documentMap.entries()).map(([documentType, label]) => ({ documentType, label }));
+  }
+
+  private buildRequestNumber(prefix = "IR") {
+    const random = Math.random().toString(36).slice(2, 7).toUpperCase();
+    return `${prefix}-${Date.now().toString(36).toUpperCase()}-${random}`;
+  }
+
+  private defaultImagineRDates() {
+    return {
+      forfaitStartDate: new Date("2026-09-01T00:00:00.000Z"),
+      validityStartDate: new Date("2026-09-01T00:00:00.000Z"),
+      validityEndDate: new Date("2027-09-30T00:00:00.000Z"),
     };
   }
 
@@ -213,6 +293,67 @@ export class SubscriptionRequestsService {
     return this.formatRequest(created);
   }
 
+  async createImagineRDraftForUser(userId: string, data: CreateImagineRDraftDto) {
+    const household = await this.findHouseholdForUser(userId);
+    const member = household.members.find((candidate) => candidate.id === data.householdMemberId);
+
+    if (!member) {
+      throw new BadRequestException("Ce profil n'appartient pas à votre foyer.");
+    }
+
+    if (member.profileType !== "YOUNG") {
+      throw new BadRequestException("Le parcours imagine R est réservé aux profils enfant / jeune.");
+    }
+
+    const payer = data.payerMemberId
+      ? household.members.find((candidate) => candidate.id === data.payerMemberId)
+      : household.members.find((candidate) => candidate.isPayer) ?? household.members[0];
+
+    if (!payer) {
+      throw new BadRequestException("Aucun payeur disponible pour ce foyer.");
+    }
+
+    const offer = await this.prismaService.productOffer.findUnique({
+      where: { id: data.offerId },
+      include: { requiredDocuments: { orderBy: { order: "asc" } } },
+    });
+
+    if (!offer || !offer.isActive || !this.isImagineROffer(offer.productType)) {
+      throw new BadRequestException("Cette offre n'est pas compatible avec le parcours imagine R.");
+    }
+
+    const requiredDocuments = this.buildImagineRRequiredDocuments(offer.productType, offer.requiredDocuments);
+
+    const created = await this.prismaService.subscriptionRequest.create({
+      data: {
+        householdId: household.id,
+        memberId: member.id,
+        payerMemberId: payer.id,
+        offerId: offer.id,
+        requestNumber: this.buildRequestNumber(),
+        flowType: "IMAGINE_R",
+        status: "DRAFT",
+        intelligentDossierEnabled: true,
+        autoRenewalEnabled: false,
+        deliveryMode: "PAYER_HOME",
+        scholarshipStatus: "UNKNOWN",
+        holderAddressSameAsPayer: true,
+        ...this.defaultImagineRDates(),
+        ...this.buildImagineRAmounts(offer.productType),
+        documents: {
+          create: requiredDocuments.map((document) => ({
+            documentType: document.documentType,
+            label: document.label,
+            status: "MISSING",
+          })),
+        },
+      },
+      include: this.requestInclude,
+    });
+
+    return this.formatRequest(created);
+  }
+
   async getForUser(userId: string, id: string) {
     const request = await this.prismaService.subscriptionRequest.findFirst({
       where: {
@@ -227,6 +368,209 @@ export class SubscriptionRequestsService {
     }
 
     return this.formatRequest(request);
+  }
+
+  async updateImagineRForUser(userId: string, id: string, data: UpdateImagineRRequestDto) {
+    const existing = await this.prismaService.subscriptionRequest.findFirst({
+      where: {
+        id,
+        flowType: "IMAGINE_R",
+        household: { ownerId: userId },
+      },
+      include: { documents: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Brouillon imagine R introuvable.");
+    }
+
+    const allSignatureAccepted =
+      data.signatureInformationAccepted === true &&
+      data.signaturePayerAccepted === true &&
+      data.signatureTermsAccepted === true &&
+      data.signatureDocumentsAccepted === true;
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      const request = await tx.subscriptionRequest.update({
+        where: { id },
+        data: {
+          ...(typeof data.hasPreviousImagineR === "boolean" ? { hasPreviousImagineR: data.hasPreviousImagineR } : {}),
+          ...(typeof data.hasCustomerNumber === "boolean" ? { hasCustomerNumber: data.hasCustomerNumber } : {}),
+          ...(typeof data.customerNumber === "string" ? { customerNumber: data.customerNumber || null } : {}),
+          ...(typeof data.infoCertificationAccepted === "boolean"
+            ? { infoCertificationAccepted: data.infoCertificationAccepted }
+            : {}),
+          ...(typeof data.holderAddressSameAsPayer === "boolean"
+            ? { holderAddressSameAsPayer: data.holderAddressSameAsPayer }
+            : {}),
+          ...(data.payerBirthDate ? { payerBirthDate: new Date(data.payerBirthDate) } : {}),
+          ...(typeof data.schoolZipOrCity === "string" ? { schoolZipOrCity: data.schoolZipOrCity || null } : {}),
+          ...(typeof data.schoolName === "string" ? { schoolName: data.schoolName || null } : {}),
+          ...(data.imagineRSchoolLevel ? { imagineRSchoolLevel: data.imagineRSchoolLevel } : {}),
+          ...(data.scholarshipStatus ? { scholarshipStatus: data.scholarshipStatus } : {}),
+          ...(typeof data.autoRenewalEnabled === "boolean" ? { autoRenewalEnabled: data.autoRenewalEnabled } : {}),
+          ...(typeof data.intelligentDossierEnabled === "boolean"
+            ? { intelligentDossierEnabled: data.intelligentDossierEnabled }
+            : {}),
+          ...(typeof data.signatureInformationAccepted === "boolean"
+            ? { signatureInformationAccepted: data.signatureInformationAccepted }
+            : {}),
+          ...(typeof data.signaturePayerAccepted === "boolean" ? { signaturePayerAccepted: data.signaturePayerAccepted } : {}),
+          ...(typeof data.signatureTermsAccepted === "boolean" ? { signatureTermsAccepted: data.signatureTermsAccepted } : {}),
+          ...(typeof data.signatureDocumentsAccepted === "boolean"
+            ? { signatureDocumentsAccepted: data.signatureDocumentsAccepted }
+            : {}),
+          ...(allSignatureAccepted ? { signedAt: new Date() } : {}),
+        },
+      });
+
+      for (const address of data.addresses ?? []) {
+        await tx.subscriptionRequestAddress.upsert({
+          where: {
+            subscriptionRequestId_type: {
+              subscriptionRequestId: id,
+              type: address.type,
+            },
+          },
+          create: {
+            subscriptionRequestId: id,
+            type: address.type,
+            street: address.street,
+            addressLine1: address.addressLine1,
+            addressLine2: address.addressLine2,
+            addressLine3: address.addressLine3,
+            postalCode: address.postalCode,
+            city: address.city,
+            country: address.country ?? "France",
+          },
+          update: {
+            street: address.street,
+            addressLine1: address.addressLine1,
+            addressLine2: address.addressLine2,
+            addressLine3: address.addressLine3,
+            postalCode: address.postalCode,
+            city: address.city,
+            country: address.country ?? "France",
+          },
+        });
+      }
+
+      for (const document of data.documents ?? []) {
+        const existingDocument = existing.documents.find((candidate) => candidate.documentType === document.documentType);
+
+        if (existingDocument) {
+          await tx.subscriptionDocument.update({
+            where: { id: existingDocument.id },
+            data: {
+              label: document.label ?? existingDocument.label,
+              status: "UPLOADED",
+              simulatedFileName: document.simulatedFileName,
+              simulatedMimeType: document.simulatedMimeType,
+              simulatedSizeBytes: document.simulatedSizeBytes,
+              uploadedAt: new Date(),
+            },
+          });
+        } else {
+          await tx.subscriptionDocument.create({
+            data: {
+              subscriptionRequestId: id,
+              documentType: document.documentType,
+              label: document.label ?? "Document justificatif",
+              status: "UPLOADED",
+              simulatedFileName: document.simulatedFileName,
+              simulatedMimeType: document.simulatedMimeType,
+              simulatedSizeBytes: document.simulatedSizeBytes,
+              uploadedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      return tx.subscriptionRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        include: this.requestInclude,
+      });
+    });
+
+    return this.formatRequest(updated);
+  }
+
+  async submitImagineRForUser(userId: string, id: string) {
+    const existing = await this.prismaService.subscriptionRequest.findFirst({
+      where: {
+        id,
+        flowType: "IMAGINE_R",
+        household: { ownerId: userId },
+      },
+      include: {
+        household: true,
+        member: true,
+        offer: true,
+        documents: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande imagine R introuvable.");
+    }
+
+    if (!existing.infoCertificationAccepted) {
+      throw new BadRequestException("La certification avant souscription doit être acceptée.");
+    }
+
+    if (
+      !existing.signatureInformationAccepted ||
+      !existing.signaturePayerAccepted ||
+      !existing.signatureTermsAccepted ||
+      !existing.signatureDocumentsAccepted
+    ) {
+      throw new BadRequestException("Les confirmations de signature sont nécessaires.");
+    }
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      await tx.subscriptionDocument.updateMany({
+        where: {
+          subscriptionRequestId: id,
+          status: "UPLOADED",
+        },
+        data: {
+          status: "UNDER_REVIEW",
+        },
+      });
+
+      const request = await tx.subscriptionRequest.update({
+        where: { id },
+        data: {
+          status: "UNDER_REVIEW",
+          paymentSimulatedAt: new Date(),
+          submittedAt: new Date(),
+        },
+        include: this.requestInclude,
+      });
+
+      await tx.familyNotification.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          type: "RENEWAL",
+          severity: "SUCCESS",
+          title: `${existing.member.firstName} — dossier imagine R envoyé`,
+          message: "La demande est enregistrée. Les justificatifs vont être vérifiés par nos équipes.",
+        },
+      });
+
+      await tx.householdActivity.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          label: `Demande ${existing.offer.name} envoyée pour ${existing.member.firstName}.`,
+        },
+      });
+
+      return request;
+    });
+
+    return this.formatRequest(updated);
   }
 
   async updateForUser(userId: string, id: string, data: UpdateSubscriptionRequestDto) {

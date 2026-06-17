@@ -1,8 +1,10 @@
 import { buildApiUrl } from "../api";
 import type {
+  CreateImagineRSubscriptionDraftPayload,
   CreateSubscriptionRequestPayload,
   SubscriptionRequestResponse,
   SubscriptionRequestStatus,
+  UpdateImagineRSubscriptionPayload,
 } from "./types";
 
 async function parseApiError(response: Response) {
@@ -67,6 +69,65 @@ export async function updateSubscriptionRequest(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+
+  return response.json() as Promise<SubscriptionRequestResponse>;
+}
+
+export async function createImagineRSubscriptionDraft(
+  accessToken: string,
+  payload: CreateImagineRSubscriptionDraftPayload,
+): Promise<SubscriptionRequestResponse> {
+  const response = await fetch(buildApiUrl("/api/subscription-requests/imagine-r/draft"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+
+  return response.json() as Promise<SubscriptionRequestResponse>;
+}
+
+export async function updateImagineRSubscriptionDraft(
+  accessToken: string,
+  id: string,
+  payload: UpdateImagineRSubscriptionPayload,
+): Promise<SubscriptionRequestResponse> {
+  const response = await fetch(buildApiUrl(`/api/subscription-requests/${id}/imagine-r`), {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+
+  return response.json() as Promise<SubscriptionRequestResponse>;
+}
+
+export async function submitImagineRSubscriptionDraft(
+  accessToken: string,
+  id: string,
+): Promise<SubscriptionRequestResponse> {
+  const response = await fetch(buildApiUrl(`/api/subscription-requests/${id}/imagine-r/submit`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 
   if (!response.ok) {
