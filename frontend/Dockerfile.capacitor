@@ -1,0 +1,53 @@
+# Étape 1 : Build de l'application Next.js (Web)
+FROM node:20-alpine AS web-builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+COPY . .
+RUN npm run build
+
+# Étape 2 : Environnement officiel Android / Java pour compiler l'APK
+FROM gradle:8-jdk21 AS apk-builder
+WORKDIR /app
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+# 1. Installer Node.js dans l'environnement Android
+USER root
+RUN apt-get update && apt-get install -y curl imagemagick unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 1bis. Installer le SDK Android requis par Gradle/Capacitor
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
+    && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/android-commandlinetools.zip \
+    && unzip -q /tmp/android-commandlinetools.zip -d ${ANDROID_HOME}/cmdline-tools \
+    && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+    && rm /tmp/android-commandlinetools.zip \
+    && yes | sdkmanager --licenses >/dev/null \
+    && sdkmanager "platform-tools" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0"
+
+# 2. Récupérer TOUT le dossier de l'application buildée (Code source + builds)
+COPY --from=web-builder /app ./
+
+# 3. Installer proprement TOUTES les dépendances au même endroit
+RUN npm install --legacy-peer-deps \
+    && npm install --legacy-peer-deps @capacitor/cli@7 @capacitor/core@7 @capacitor/android@7
+
+# 4. Forcer la création d'un dossier d'assets statiques fictif
+RUN mkdir -p ./www && touch ./www/index.html
+
+# 5. Écrire le fichier de config en pointant sur 'www'
+RUN echo '{\n  "appId": "com.rapycan.hackaton",\n  "appName": "IDF Mobilités",\n  "webDir": "www"\n}' > capacitor.config.json
+
+# 6. Créer le projet Android natif s'il n'existe pas encore, puis synchroniser les assets web
+RUN if [ ! -f android/gradlew ]; then rm -rf android && npx --no-install cap add android; fi \
+    && npx --no-install cap sync android
+
+# 6bis. Générer les ressources d'icône Android à partir de assets/icon.png
+RUN ./scripts/generate-android-icons.sh
+
+# 7. Lancer la compilation de l'APK via Gradle
+WORKDIR /app/android
+RUN ./gradlew assembleDebug

@@ -3,6 +3,7 @@
 ## En mode dev
 
 ### Pour la bdd
+
 - Renommer .env.example en .env
 
 - Changer les variables et les faire correspondre dans le DATABASE_URL
@@ -21,11 +22,9 @@
 
 - Lancer la commande `npm run dev`
 
-
 ## En mode prod
 
 - À voir
-
 
 ## Architecture du projet
 
@@ -45,4 +44,18 @@
 
 - Lancer la commande `npx prisma generate` pour générer les nouveaux types des modèle qui seront utilisés par le client Prisma
 
+### ANDROID
 
+Depuis la racine du projet:
+
+```bash
+docker build -t hackathon-capacitor -f frontend/Dockerfile.capacitor frontend
+
+docker create --name temp-cap hackathon-capacitor
+
+docker cp temp-cap:/app/android/app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk
+
+docker rm temp-cap
+```
+
+L'APK est généré dans `./app-debug.apk`.
