@@ -63,7 +63,10 @@ const offers = [
     maxAge: 10,
     order: 2,
     benefits: ["Adapté aux moins de 11 ans", "Tarif très avantageux", "Déplacements en Île-de-France"],
-    documents: [{ documentType: "PHOTO", label: "Photo récente" }],
+    documents: [
+      { documentType: "PHOTO", label: "Photo récente" },
+      { documentType: "ID_DOCUMENT", label: "Justificatif d'identité" },
+    ],
   },
   {
     slug: "imagine-r-scolaire",
@@ -79,6 +82,7 @@ const offers = [
     benefits: ["Adapté aux collégiens et lycéens", "Transports illimités", "Renouvellement anticipable avant la rentrée"],
     documents: [
       { documentType: "PHOTO", label: "Photo récente" },
+      { documentType: "ID_DOCUMENT", label: "Justificatif d'identité" },
       { documentType: "SCHOOL_CERTIFICATE", label: "Certificat scolaire" },
     ],
   },
@@ -453,77 +457,6 @@ async function main() {
       { userId: user.id, type: "PARTNER_OFFERS", accepted: false },
     ],
   });
-
-  const imagineRScolaire = await prisma.productOffer.findUnique({
-    where: { slug: "imagine-r-scolaire" },
-    include: { requiredDocuments: { orderBy: { order: "asc" } } },
-  });
-  const navigoSenior = await prisma.productOffer.findUnique({
-    where: { slug: "navigo-senior" },
-    include: { requiredDocuments: { orderBy: { order: "asc" } } },
-  });
-
-  if (imagineRScolaire) {
-    await prisma.subscriptionRequest.create({
-      data: {
-        householdId: household.id,
-        memberId: child.id,
-        payerMemberId: manager.id,
-        offerId: imagineRScolaire.id,
-        status: "UNDER_REVIEW",
-        intelligentDossierEnabled: true,
-        autoRenewalEnabled: true,
-        createdAt: new Date("2026-06-16T10:00:00.000Z"),
-        documents: {
-          create: imagineRScolaire.requiredDocuments.map((document) => ({
-            documentType: document.documentType,
-            label: document.label,
-            status: "UNDER_REVIEW",
-          })),
-        },
-      },
-    });
-
-    await prisma.householdActivity.create({
-      data: {
-        householdId: household.id,
-        memberId: child.id,
-        label: "Demande Imagine R Scolaire créée pour Lucas.",
-        createdAt: new Date("2026-06-16T10:00:00.000Z"),
-      },
-    });
-  }
-
-  if (navigoSenior) {
-    await prisma.subscriptionRequest.create({
-      data: {
-        householdId: household.id,
-        memberId: senior.id,
-        payerMemberId: manager.id,
-        offerId: navigoSenior.id,
-        status: "WAITING_DOCUMENTS",
-        intelligentDossierEnabled: false,
-        autoRenewalEnabled: false,
-        createdAt: new Date("2026-06-16T10:30:00.000Z"),
-        documents: {
-          create: navigoSenior.requiredDocuments.map((document) => ({
-            documentType: document.documentType,
-            label: document.label,
-            status: "MISSING",
-          })),
-        },
-      },
-    });
-
-    await prisma.householdActivity.create({
-      data: {
-        householdId: household.id,
-        memberId: senior.id,
-        label: "Dossier senior à vérifier pour Marie.",
-        createdAt: new Date("2026-06-16T10:30:00.000Z"),
-      },
-    });
-  }
 
   await prisma.supportCase.create({
     data: {

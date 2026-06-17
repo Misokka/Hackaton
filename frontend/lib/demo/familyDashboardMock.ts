@@ -24,6 +24,7 @@ const manager: DashboardMember = {
   isLegalRepresentative: true,
   isDemoProfile: false,
   hasActiveTitle: false,
+  pendingRequest: null,
 };
 
 const youngMember: DashboardMember = {
@@ -46,6 +47,7 @@ const youngMember: DashboardMember = {
   isLegalRepresentative: false,
   isDemoProfile: false,
   hasActiveTitle: false,
+  pendingRequest: null,
 };
 
 export const familyDashboardMock: HouseholdDashboardResponse = {
@@ -75,6 +77,7 @@ export const familyDashboardMock: HouseholdDashboardResponse = {
         "Aucun titre n'est encore rattaché. Vous pourrez comparer les offres jeune adaptées à son profil.",
       memberId: youngMember.id,
       createdAt: "2026-06-16T09:00:00.000Z",
+      subscriptionRequest: null,
     },
     {
       id: "notif-service",
@@ -85,6 +88,7 @@ export const familyDashboardMock: HouseholdDashboardResponse = {
         "Les alertes importantes sont liées au suivi de vos titres et ne sont pas des communications commerciales.",
       memberId: null,
       createdAt: "2026-06-16T07:00:00.000Z",
+      subscriptionRequest: null,
     },
   ],
   recentActivity: [

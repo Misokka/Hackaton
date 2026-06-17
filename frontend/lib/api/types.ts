@@ -108,6 +108,25 @@ export type DashboardMemberStatus =
 
 export type DashboardNotificationSeverity = "INFO" | "WARNING" | "SUCCESS" | "DANGER";
 
+export type SubscriptionRequestStatus =
+  | "DRAFT"
+  | "WAITING_DOCUMENTS"
+  | "UNDER_REVIEW"
+  | "PAYMENT_PENDING"
+  | "CONFIRMED"
+  | "ACTIVE"
+  | "BLOCKED"
+  | "CANCELLED";
+
+export type DashboardPendingRequest = {
+  id: string;
+  requestNumber: string | null;
+  status: SubscriptionRequestStatus;
+  offerName: string;
+  offerSlug: string;
+  updatedAt: string;
+};
+
 export type DashboardMember = {
   id: string;
   firstName: string;
@@ -128,6 +147,7 @@ export type DashboardMember = {
   isLegalRepresentative: boolean;
   isDemoProfile: boolean;
   hasActiveTitle: boolean;
+  pendingRequest: DashboardPendingRequest | null;
 };
 
 export type DashboardNotification = {
@@ -138,6 +158,7 @@ export type DashboardNotification = {
   message: string;
   memberId: string | null;
   createdAt: string;
+  subscriptionRequest: DashboardPendingRequest | null;
 };
 
 export type RecentActivityItem = {
@@ -334,17 +355,11 @@ export type TitleRecommendationResponse = {
   nextAction: string;
 };
 
-export type SubscriptionRequestStatus =
-  | "DRAFT"
-  | "WAITING_DOCUMENTS"
-  | "UNDER_REVIEW"
-  | "PAYMENT_PENDING"
-  | "CONFIRMED"
-  | "ACTIVE"
-  | "BLOCKED"
-  | "CANCELLED";
-
 export type SubscriptionDocumentStatus = "MISSING" | "READY" | "UPLOADED" | "UNDER_REVIEW" | "VALIDATED" | "REJECTED";
+export type SubscriptionRequestFlow = "GENERIC" | "IMAGINE_R";
+export type ImagineRScholarshipStatus = "YES" | "NO" | "UNKNOWN";
+export type ImagineRDeliveryMode = "PAYER_HOME";
+export type SubscriptionRequestAddressType = "HOLDER" | "PAYER";
 
 export type CreateSubscriptionRequestPayload = {
   householdMemberId: string;
@@ -354,8 +369,56 @@ export type CreateSubscriptionRequestPayload = {
   autoRenewalEnabled: boolean;
 };
 
+export type ImagineRAddressPayload = {
+  type?: SubscriptionRequestAddressType;
+  street: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  addressLine3?: string;
+  postalCode: string;
+  city: string;
+  country?: string;
+};
+
+export type CreateImagineRSubscriptionDraftPayload = {
+  householdMemberId: string;
+  offerId: string;
+  payerMemberId?: string;
+};
+
+export type ImagineRDocumentUploadPayload = {
+  documentType: OfferDocumentType;
+  label?: string;
+  simulatedFileName?: string;
+  simulatedMimeType?: string;
+  simulatedSizeBytes?: number;
+};
+
+export type UpdateImagineRSubscriptionPayload = {
+  hasPreviousImagineR?: boolean;
+  hasCustomerNumber?: boolean;
+  customerNumber?: string;
+  infoCertificationAccepted?: boolean;
+  holderAddressSameAsPayer?: boolean;
+  payerBirthDate?: string;
+  schoolZipOrCity?: string;
+  schoolName?: string;
+  imagineRSchoolLevel?: SchoolLevel;
+  scholarshipStatus?: ImagineRScholarshipStatus;
+  autoRenewalEnabled?: boolean;
+  intelligentDossierEnabled?: boolean;
+  signatureInformationAccepted?: boolean;
+  signaturePayerAccepted?: boolean;
+  signatureTermsAccepted?: boolean;
+  signatureDocumentsAccepted?: boolean;
+  addresses?: Array<ImagineRAddressPayload & { type: SubscriptionRequestAddressType }>;
+  documents?: ImagineRDocumentUploadPayload[];
+};
+
 export type SubscriptionRequestResponse = {
   id: string;
+  requestNumber: string | null;
+  flowType: SubscriptionRequestFlow;
   status: SubscriptionRequestStatus;
   autoRenewalEnabled: boolean;
   intelligentDossierEnabled: boolean;
@@ -392,7 +455,42 @@ export type SubscriptionRequestResponse = {
     label: string;
     status: SubscriptionDocumentStatus;
     rejectionReason: string | null;
+    simulatedFileName?: string | null;
+    simulatedMimeType?: string | null;
+    simulatedSizeBytes?: number | null;
+    uploadedAt?: string | null;
   }>;
+  imagineR: {
+    hasPreviousImagineR: boolean | null;
+    hasCustomerNumber: boolean | null;
+    customerNumber: string | null;
+    infoCertificationAccepted: boolean;
+    holderAddressSameAsPayer: boolean;
+    payerBirthDate: string | null;
+    schoolZipOrCity: string | null;
+    schoolName: string | null;
+    schoolLevel: SchoolLevel | null;
+    scholarshipStatus: ImagineRScholarshipStatus | null;
+    forfaitStartDate: string | null;
+    validityStartDate: string | null;
+    validityEndDate: string | null;
+    deliveryMode: ImagineRDeliveryMode | null;
+    baseAmountCents: number | null;
+    feeAmountCents: number | null;
+    totalAmountCents: number | null;
+    currency: string;
+    signatureInformationAccepted: boolean;
+    signaturePayerAccepted: boolean;
+    signatureTermsAccepted: boolean;
+    signatureDocumentsAccepted: boolean;
+    signedAt: string | null;
+    paymentSimulatedAt: string | null;
+    submittedAt: string | null;
+    addresses: {
+      holder?: Omit<ImagineRAddressPayload, "type"> & { id: string };
+      payer?: Omit<ImagineRAddressPayload, "type"> & { id: string };
+    };
+  } | null;
   timeline: Array<{
     key: string;
     label: string;

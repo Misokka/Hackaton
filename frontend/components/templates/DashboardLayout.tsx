@@ -79,7 +79,6 @@ export function DashboardLayout({
             href="/dashboard/family?tab=services#sos-navigo"
             className="inline-flex min-h-10 items-center gap-2 rounded-full bg-idfm-interaction px-4 text-sm font-bold text-white shadow-sm transition hover:bg-idfm-interaction/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
           >
-            <span aria-hidden="true">🆘</span>
             SOS Navigo
           </Link>
         </div>

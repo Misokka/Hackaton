@@ -37,6 +37,10 @@ function getMemberBadges(member: DashboardMember) {
 }
 
 function getPrimaryAction(member: DashboardMember) {
+  if (member.pendingRequest) {
+    return `/dashboard/family/subscriptions/${member.pendingRequest.id}/confirmation`;
+  }
+
   if (member.profileType === "YOUNG") {
     return `/dashboard/family/titles/recommendation?memberId=${member.id}`;
   }
@@ -49,6 +53,10 @@ function getPrimaryAction(member: DashboardMember) {
 }
 
 function getPrimaryLabel(member: DashboardMember) {
+  if (member.pendingRequest) {
+    return "Voir la demande";
+  }
+
   if (member.profileType === "YOUNG") {
     return "Trouver une offre";
   }

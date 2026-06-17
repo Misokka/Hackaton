@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nest
 import type { AuthenticatedRequest } from "src/auth/guards/jwt-auth.guard";
 import { JwtAuthGuard } from "src/auth/guards/jwt-auth.guard";
 import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request.dto";
+import { CreateImagineRDraftDto, UpdateImagineRRequestDto } from "./dtos/imagine-r-subscription-request.dto";
 import { UpdateSubscriptionRequestDto } from "./dtos/update-subscription-request.dto";
 import { SubscriptionRequestsService } from "./subscription-requests.service";
 
@@ -16,6 +17,28 @@ export class SubscriptionRequestsController {
     @Body() data: CreateSubscriptionRequestDto,
   ) {
     return this.subscriptionRequestsService.createForUser(request.user.sub, data);
+  }
+
+  @Post("imagine-r/draft")
+  async createImagineRDraft(
+    @Req() request: AuthenticatedRequest,
+    @Body() data: CreateImagineRDraftDto,
+  ) {
+    return this.subscriptionRequestsService.createImagineRDraftForUser(request.user.sub, data);
+  }
+
+  @Patch(":id/imagine-r")
+  async updateImagineR(
+    @Req() request: AuthenticatedRequest,
+    @Param("id") id: string,
+    @Body() data: UpdateImagineRRequestDto,
+  ) {
+    return this.subscriptionRequestsService.updateImagineRForUser(request.user.sub, id, data);
+  }
+
+  @Post(":id/imagine-r/submit")
+  async submitImagineR(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    return this.subscriptionRequestsService.submitImagineRForUser(request.user.sub, id);
   }
 
   @Get(":id")

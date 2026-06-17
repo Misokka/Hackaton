@@ -12,6 +12,23 @@ type DashboardStatus =
   | "LOST"
   | "EXPIRED";
 
+type DashboardPendingRequest = {
+  id: string;
+  requestNumber: string | null;
+  status:
+    | "DRAFT"
+    | "WAITING_DOCUMENTS"
+    | "UNDER_REVIEW"
+    | "PAYMENT_PENDING"
+    | "CONFIRMED"
+    | "ACTIVE"
+    | "BLOCKED"
+    | "CANCELLED";
+  offerName: string;
+  offerSlug: string;
+  updatedAt: string;
+};
+
 type DashboardMember = {
   id: string;
   firstName: string;
@@ -32,6 +49,7 @@ type DashboardMember = {
   isLegalRepresentative: boolean;
   isDemoProfile: boolean;
   hasActiveTitle: boolean;
+  pendingRequest: DashboardPendingRequest | null;
 };
 
 type DashboardNotification = {
@@ -42,6 +60,7 @@ type DashboardNotification = {
   message: string;
   memberId: string | null;
   createdAt: string;
+  subscriptionRequest: DashboardPendingRequest | null;
 };
 
 type DashboardActivity = {
@@ -190,9 +209,13 @@ export class HouseholdsService {
         recommendedProduct: string | null;
       }>;
       subscriptionRequests: Array<{
+        id: string;
+        requestNumber: string | null;
         status: string;
+        updatedAt: Date;
         offer: {
           name: string;
+          slug: string;
         };
       }>;
     },
@@ -211,6 +234,7 @@ export class HouseholdsService {
     const latestOpenRequest = member.subscriptionRequests.find(
       (request) => !["ACTIVE", "CANCELLED", "BLOCKED"].includes(request.status),
     );
+    const pendingRequest = latestOpenRequest ? this.formatPendingRequest(latestOpenRequest) : null;
 
     const relationLabel =
       profileType === "MANAGER"
@@ -232,32 +256,82 @@ export class HouseholdsService {
       relationLabel,
       profileType,
       currentProduct: latestSubscription?.productName ?? defaults.currentProduct,
-      recommendedProduct: latestSubscription?.recommendedProduct ?? defaults.recommendedProduct,
-      status: hasOpenLostPass ? "LOST" : (latestSubscription?.status ?? defaults.status),
+      recommendedProduct:
+        latestSubscription?.recommendedProduct ??
+        pendingRequest?.offerName ??
+        defaults.recommendedProduct,
+      status: hasOpenLostPass
+        ? "LOST"
+        : pendingRequest
+          ? "PENDING_DOCUMENT"
+          : (latestSubscription?.status ?? defaults.status),
       nextAction: hasOpenLostPass
         ? "Suivre la demande de remplacement"
-        : (latestSubscription?.nextActionLabel ?? defaults.nextAction),
+        : pendingRequest
+          ? "Demande envoyée : suivez la vérification du dossier"
+          : (latestSubscription?.nextActionLabel ?? defaults.nextAction),
       payerName: member.isPayer ? `${member.firstName} ${member.lastName}` : managerName,
       isHolder: member.isHolder,
       isPayer: member.isPayer,
       isLegalRepresentative: member.isLegalRepresentative,
       isDemoProfile: false,
       hasActiveTitle,
+      pendingRequest,
+    };
+  }
+
+  private formatPendingRequest(request: {
+    id: string;
+    requestNumber: string | null;
+    status: string;
+    updatedAt: Date;
+    offer: {
+      name: string;
+      slug: string;
+    };
+  }): DashboardPendingRequest {
+    return {
+      id: request.id,
+      requestNumber: request.requestNumber,
+      status: request.status as DashboardPendingRequest["status"],
+      offerName: request.offer.name,
+      offerSlug: request.offer.slug,
+      updatedAt: request.updatedAt.toISOString(),
     };
   }
 
   private buildNotifications(
     household: Awaited<ReturnType<HouseholdsService["findHouseholdRecordForUser"]>>,
   ): DashboardNotification[] {
-    return household.notifications.map((notification) => ({
-      id: notification.id,
-      type: notification.type,
-      severity: notification.severity,
-      title: notification.title,
-      message: notification.message,
-      memberId: notification.memberId,
-      createdAt: notification.createdAt.toISOString(),
-    }));
+    const pendingRequestsByMember = new Map<string, DashboardPendingRequest>();
+
+    household.members.forEach((member) => {
+      const latestOpenRequest = member.subscriptionRequests.find(
+        (request) => !["ACTIVE", "CANCELLED", "BLOCKED"].includes(request.status),
+      );
+
+      if (latestOpenRequest) {
+        pendingRequestsByMember.set(member.id, this.formatPendingRequest(latestOpenRequest));
+      }
+    });
+
+    return household.notifications.map((notification) => {
+      const canPointToSubscriptionRequest = notification.type !== "SUPPORT_UPDATE";
+
+      return {
+        id: notification.id,
+        type: notification.type,
+        severity: notification.severity,
+        title: notification.title,
+        message: notification.message,
+        memberId: notification.memberId,
+        createdAt: notification.createdAt.toISOString(),
+        subscriptionRequest:
+          notification.memberId && canPointToSubscriptionRequest
+            ? (pendingRequestsByMember.get(notification.memberId) ?? null)
+            : null,
+      };
+    });
   }
 
   private buildRecentActivity(

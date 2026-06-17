@@ -101,6 +101,16 @@ enum SubscriptionRequestStatus {
   CANCELLED
 }
 
+enum SubscriptionRequestFlow {
+  GENERIC
+  IMAGINE_R
+}
+
+enum SubscriptionRequestAddressType {
+  HOLDER
+  PAYER
+}
+
 enum SubscriptionDocumentStatus {
   MISSING
   READY
@@ -108,6 +118,16 @@ enum SubscriptionDocumentStatus {
   UNDER_REVIEW
   VALIDATED
   REJECTED
+}
+
+enum ImagineRScholarshipStatus {
+  YES
+  NO
+  UNKNOWN
+}
+
+enum ImagineRDeliveryMode {
+  PAYER_HOME
 }
 
 enum FamilyNotificationType {
@@ -263,6 +283,8 @@ model OfferRequiredDocument {
 
 model SubscriptionRequest {
   id                         String                    @id @default(uuid())
+  requestNumber              String?                   @unique
+  flowType                   SubscriptionRequestFlow   @default(GENERIC)
   householdId                String
   household                  Household                 @relation(fields: [householdId], references: [id], onDelete: Cascade)
   memberId                   String
@@ -274,6 +296,32 @@ model SubscriptionRequest {
   status                     SubscriptionRequestStatus @default(WAITING_DOCUMENTS)
   autoRenewalEnabled         Boolean                   @default(false)
   intelligentDossierEnabled  Boolean                   @default(false)
+  hasPreviousImagineR         Boolean?
+  hasCustomerNumber           Boolean?
+  customerNumber              String?
+  infoCertificationAccepted   Boolean                   @default(false)
+  holderAddressSameAsPayer    Boolean                   @default(true)
+  payerBirthDate              DateTime?
+  schoolZipOrCity             String?
+  schoolName                  String?
+  imagineRSchoolLevel         SchoolLevel?
+  scholarshipStatus           ImagineRScholarshipStatus?
+  forfaitStartDate            DateTime?
+  validityStartDate           DateTime?
+  validityEndDate             DateTime?
+  deliveryMode                ImagineRDeliveryMode?
+  baseAmountCents             Int?
+  feeAmountCents              Int?
+  totalAmountCents            Int?
+  currency                    String                    @default("EUR")
+  signatureInformationAccepted Boolean                  @default(false)
+  signaturePayerAccepted      Boolean                   @default(false)
+  signatureTermsAccepted      Boolean                   @default(false)
+  signatureDocumentsAccepted  Boolean                   @default(false)
+  signedAt                    DateTime?
+  paymentSimulatedAt          DateTime?
+  submittedAt                 DateTime?
+  addresses                  SubscriptionRequestAddress[]
   documents                  SubscriptionDocument[]
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
@@ -282,6 +330,27 @@ model SubscriptionRequest {
   @@index([memberId])
   @@index([offerId])
   @@index([payerMemberId])
+  @@index([flowType])
+  @@index([status])
+}
+
+model SubscriptionRequestAddress {
+  id                     String                         @id @default(uuid())
+  subscriptionRequestId  String
+  subscriptionRequest    SubscriptionRequest            @relation(fields: [subscriptionRequestId], references: [id], onDelete: Cascade)
+  type                   SubscriptionRequestAddressType
+  street                 String
+  addressLine1           String?
+  addressLine2           String?
+  addressLine3           String?
+  postalCode             String
+  city                   String
+  country                String                         @default("France")
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  @@unique([subscriptionRequestId, type])
+  @@index([subscriptionRequestId])
 }
 
 model SubscriptionDocument {
@@ -292,6 +361,10 @@ model SubscriptionDocument {
   label                  String
   status                 SubscriptionDocumentStatus @default(MISSING)
   rejectionReason        String?
+  simulatedFileName      String?
+  simulatedMimeType      String?
+  simulatedSizeBytes     Int?
+  uploadedAt             DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
 

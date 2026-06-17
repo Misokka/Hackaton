@@ -1,0 +1,764 @@
+"use client";
+
+import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Badge } from "@/components/atoms/Badge";
+import { Button } from "@/components/atoms/Button";
+import { Checkbox } from "@/components/atoms/Checkbox";
+import { Input } from "@/components/atoms/Input";
+import { InfoBox } from "@/components/molecules/InfoBox";
+import { ProfilePickerCard } from "@/components/molecules/ProfilePickerCard";
+import { SubscriptionConfirmationTimeline } from "@/components/molecules/SubscriptionConfirmationTimeline";
+import { SubscriptionStepper } from "@/components/molecules/SubscriptionStepper";
+import { DashboardLayout } from "@/components/templates/DashboardLayout";
+import { getMyHouseholdDashboard } from "@/lib/api/households";
+import {
+  createImagineRSubscriptionDraft,
+  getSubscriptionRequest,
+  submitImagineRSubscriptionDraft,
+  updateImagineRSubscriptionDraft,
+} from "@/lib/api/subscriptions";
+import { getTitleOffers } from "@/lib/api/titles";
+import type {
+  DashboardMember,
+  HouseholdDashboardResponse,
+  ImagineRAddressPayload,
+  ImagineRScholarshipStatus,
+  ProductOffer,
+  SchoolLevel,
+  SubscriptionRequestResponse,
+  UpdateImagineRSubscriptionPayload,
+} from "@/lib/api/types";
+import { familyDashboardMock } from "@/lib/demo/familyDashboardMock";
+import { titleOffersMock } from "@/lib/demo/titleOffersMock";
+
+const steps = [
+  "Profil",
+  "Ancien forfait",
+  "Client",
+  "Information",
+  "Titulaire",
+  "Payeur",
+  "Préférences",
+  "Récapitulatif",
+  "Signature",
+  "Paiement",
+  "Suivi",
+];
+
+const schoolLevelLabels: Record<SchoolLevel, string> = {
+  PRIMARY: "Primaire",
+  COLLEGE: "Collège",
+  LYCEE: "Lycée",
+  HIGHER_EDUCATION: "Études supérieures",
+  OTHER: "Autre",
+};
+
+const emptyAddress: ImagineRAddressPayload = {
+  street: "",
+  addressLine1: "",
+  addressLine2: "",
+  addressLine3: "",
+  postalCode: "",
+  city: "",
+  country: "France",
+};
+
+const AGE_REFERENCE_DATE = new Date("2026-06-17T12:00:00.000Z");
+
+type FormState = {
+  hasPreviousImagineR: boolean | null;
+  hasCustomerNumber: boolean | null;
+  customerNumber: string;
+  infoCertificationAccepted: boolean;
+  holderAddressSameAsPayer: boolean;
+  holderAddress: ImagineRAddressPayload;
+  payerBirthDate: string;
+  payerAddress: ImagineRAddressPayload;
+  schoolZipOrCity: string;
+  schoolName: string;
+  schoolLevel: SchoolLevel;
+  scholarshipStatus: ImagineRScholarshipStatus;
+  photoFile: { name: string; type: string; size: number } | null;
+  identityFile: { name: string; type: string; size: number } | null;
+  signatureInformationAccepted: boolean;
+  signaturePayerAccepted: boolean;
+  signatureTermsAccepted: boolean;
+  signatureDocumentsAccepted: boolean;
+};
+
+function getAge(birthDate: string | null) {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+  const today = AGE_REFERENCE_DATE;
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age -= 1;
+  return age;
+}
+
+function defaultOfferForMember(member: DashboardMember | undefined, offers: ProductOffer[]) {
+  const age = getAge(member?.birthDate ?? null);
+  const productType = age !== null && age < 11 ? "IMAGINE_R_JUNIOR" : "IMAGINE_R_SCHOOL";
+  return offers.find((offer) => offer.productType === productType) ?? offers.find((offer) => offer.productType === "IMAGINE_R_SCHOOL") ?? offers[0];
+}
+
+function centsToEuro(value: number | null | undefined) {
+  if (typeof value !== "number") return "-";
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value / 100);
+}
+
+function toDateInputValue(date: string | null) {
+  if (!date) return "";
+  return date.slice(0, 10);
+}
+
+function SectionCard({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section className="rounded-3xl border border-neutral-light bg-white p-5 shadow-sm md:p-6">
+      <h2 className="text-2xl font-bold text-idfm-anthracite">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ChoiceCards({
+  onChange,
+  value,
+}: {
+  value: boolean | null;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {[
+        { label: "Non", value: false },
+        { label: "Oui", value: true },
+      ].map((choice) => (
+        <button
+          key={choice.label}
+          type="button"
+          onClick={() => onChange(choice.value)}
+          className={`min-h-24 rounded-2xl border p-5 text-center text-lg font-bold transition focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus ${
+            value === choice.value ? "border-idfm-interaction bg-idfm-light text-idfm-focus" : "border-neutral-light bg-neutral-xlight text-idfm-anthracite hover:border-idfm-medium"
+          }`}
+        >
+          {choice.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AddressForm({
+  address,
+  onChange,
+}: {
+  address: ImagineRAddressPayload;
+  onChange: (address: ImagineRAddressPayload) => void;
+}) {
+  function update(field: keyof ImagineRAddressPayload, value: string) {
+    onChange({ ...address, [field]: value });
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Input label="Numéro et nom de rue" value={address.street} onChange={(event) => update("street", event.target.value)} />
+      <Input label="Complément d'adresse 1" value={address.addressLine1 ?? ""} onChange={(event) => update("addressLine1", event.target.value)} />
+      <Input label="Complément d'adresse 2" value={address.addressLine2 ?? ""} onChange={(event) => update("addressLine2", event.target.value)} />
+      <Input label="Complément d'adresse 3" value={address.addressLine3 ?? ""} onChange={(event) => update("addressLine3", event.target.value)} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input label="Code postal" value={address.postalCode} onChange={(event) => update("postalCode", event.target.value)} />
+        <Input label="Ville" value={address.city} onChange={(event) => update("city", event.target.value)} />
+      </div>
+      <Input label="Pays" value={address.country ?? "France"} onChange={(event) => update("country", event.target.value)} />
+    </div>
+  );
+}
+
+function UploadBox({
+  file,
+  label,
+  onFile,
+}: {
+  file: FormState["photoFile"];
+  label: string;
+  onFile: (file: FormState["photoFile"]) => void;
+}) {
+  return (
+    <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-idfm-interaction bg-white p-5 text-center transition hover:bg-idfm-light focus-within:ring-3 focus-within:ring-idfm-medium">
+      <span className="text-lg font-bold text-idfm-interaction">{file ? file.name : label}</span>
+      <span className="mt-2 text-sm text-neutral-medium">{file ? "Document ajouté pour la démo" : "Glissez-déposez ou chargez un fichier"}</span>
+      <input
+        type="file"
+        className="sr-only"
+        onChange={(event) => {
+          const selectedFile = event.target.files?.[0];
+          onFile(selectedFile ? { name: selectedFile.name, type: selectedFile.type, size: selectedFile.size } : null);
+        }}
+      />
+    </label>
+  );
+}
+
+function ImagineRSubscriptionContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [dashboard, setDashboard] = useState<HouseholdDashboardResponse | null>(null);
+  const [offers, setOffers] = useState<ProductOffer[]>(titleOffersMock);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(searchParams.get("memberId"));
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(searchParams.get("offerId"));
+  const [draft, setDraft] = useState<SubscriptionRequestResponse | null>(null);
+  const [step, setStep] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>({
+    hasPreviousImagineR: null,
+    hasCustomerNumber: null,
+    customerNumber: "",
+    infoCertificationAccepted: false,
+    holderAddressSameAsPayer: true,
+    holderAddress: emptyAddress,
+    payerBirthDate: "",
+    payerAddress: emptyAddress,
+    schoolZipOrCity: "",
+    schoolName: "",
+    schoolLevel: "COLLEGE",
+    scholarshipStatus: "UNKNOWN",
+    photoFile: null,
+    identityFile: null,
+    signatureInformationAccepted: false,
+    signaturePayerAccepted: false,
+    signatureTermsAccepted: false,
+    signatureDocumentsAccepted: false,
+  });
+
+  useEffect(() => {
+    const accessToken = localStorage.getItem("familyAccessToken");
+    const requestId = searchParams.get("requestId");
+
+    async function load() {
+      try {
+        const [dashboardResponse, offersResponse] = await Promise.all([
+          accessToken ? getMyHouseholdDashboard(accessToken) : Promise.resolve(familyDashboardMock),
+          getTitleOffers().catch(() => titleOffersMock),
+        ]);
+
+        setDashboard(dashboardResponse);
+        setOffers(offersResponse);
+
+        if (requestId && accessToken) {
+          const request = await getSubscriptionRequest(accessToken, requestId);
+          setDraft(request);
+          setSelectedMemberId(request.member.id);
+          setSelectedOfferId(request.offer.id);
+          if (request.imagineR) {
+            setForm((current) => ({
+              ...current,
+              hasPreviousImagineR: request.imagineR?.hasPreviousImagineR ?? current.hasPreviousImagineR,
+              hasCustomerNumber: request.imagineR?.hasCustomerNumber ?? current.hasCustomerNumber,
+              customerNumber: request.imagineR?.customerNumber ?? "",
+              infoCertificationAccepted: request.imagineR?.infoCertificationAccepted ?? false,
+              holderAddressSameAsPayer: request.imagineR?.holderAddressSameAsPayer ?? true,
+              holderAddress: request.imagineR?.addresses.holder ?? current.holderAddress,
+              payerBirthDate: toDateInputValue(request.imagineR?.payerBirthDate ?? null),
+              payerAddress: request.imagineR?.addresses.payer ?? current.payerAddress,
+              schoolZipOrCity: request.imagineR?.schoolZipOrCity ?? "",
+              schoolName: request.imagineR?.schoolName ?? "",
+              schoolLevel: request.imagineR?.schoolLevel ?? current.schoolLevel,
+              scholarshipStatus: request.imagineR?.scholarshipStatus ?? "UNKNOWN",
+              signatureInformationAccepted: request.imagineR?.signatureInformationAccepted ?? false,
+              signaturePayerAccepted: request.imagineR?.signaturePayerAccepted ?? false,
+              signatureTermsAccepted: request.imagineR?.signatureTermsAccepted ?? false,
+              signatureDocumentsAccepted: request.imagineR?.signatureDocumentsAccepted ?? false,
+            }));
+          }
+        }
+
+        const memberId = searchParams.get("memberId") ?? dashboardResponse.members.find((member) => member.profileType === "YOUNG")?.id ?? dashboardResponse.members[0]?.id ?? null;
+        const member = dashboardResponse.members.find((candidate) => candidate.id === memberId);
+        const offer = offersResponse.find((candidate) => candidate.id === searchParams.get("offerId")) ?? defaultOfferForMember(member, offersResponse);
+        setSelectedMemberId((current) => current ?? memberId);
+        setSelectedOfferId((current) => current ?? offer?.id ?? null);
+        setForm((current) => ({
+          ...current,
+          schoolLevel: member?.schoolLevel ?? current.schoolLevel,
+        }));
+      } catch (error) {
+        setDashboard(familyDashboardMock);
+        setMessage(error instanceof Error ? error.message : "Mode démo activé.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void load();
+  }, [searchParams]);
+
+  const data = dashboard ?? familyDashboardMock;
+  const youngMembers = data.members.filter((member) => member.profileType === "YOUNG");
+  const selectedMember = youngMembers.find((member) => member.id === selectedMemberId) ?? youngMembers[0];
+  const selectedOffer = useMemo(
+    () => offers.find((offer) => offer.id === selectedOfferId) ?? defaultOfferForMember(selectedMember, offers),
+    [offers, selectedMember, selectedOfferId],
+  );
+  const payer = data.members.find((member) => member.id === data.manager.id) ?? data.members[0];
+  const age = getAge(selectedMember?.birthDate ?? null);
+  const computedSituation =
+    selectedMember?.schoolLevel === "HIGHER_EDUCATION"
+      ? "Études supérieures"
+      : age !== null && age < 11
+        ? "Enfant de moins de 11 ans"
+        : "Enfant scolarisé";
+
+  async function ensureDraft() {
+    const accessToken = localStorage.getItem("familyAccessToken");
+
+    if (!accessToken) {
+      throw new Error("Connectez-vous pour enregistrer le brouillon.");
+    }
+
+    if (!selectedMember || !selectedOffer) {
+      throw new Error("Choisissez un enfant et une offre imagine R.");
+    }
+
+    if (draft) {
+      return { accessToken, request: draft };
+    }
+
+    const request = await createImagineRSubscriptionDraft(accessToken, {
+      householdMemberId: selectedMember.id,
+      offerId: selectedOffer.id,
+      payerMemberId: payer?.id,
+    });
+    setDraft(request);
+    router.replace(`/dashboard/family/subscriptions/imagine-r/new?memberId=${selectedMember.id}&offerId=${selectedOffer.id}&requestId=${request.id}`);
+    return { accessToken, request };
+  }
+
+  async function save(payload: UpdateImagineRSubscriptionPayload) {
+    const { accessToken, request } = await ensureDraft();
+    const updated = await updateImagineRSubscriptionDraft(accessToken, request.id, payload);
+    setDraft(updated);
+    return updated;
+  }
+
+  function setFormValue<Key extends keyof FormState>(key: Key, value: FormState[Key]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function next() {
+    setIsSaving(true);
+    setMessage(null);
+
+    try {
+      if (step === 0) {
+        await ensureDraft();
+      }
+      if (step === 1) {
+        if (form.hasPreviousImagineR === null) throw new Error("Choisissez Oui ou Non.");
+        await save({ hasPreviousImagineR: form.hasPreviousImagineR });
+      }
+      if (step === 2) {
+        if (form.hasCustomerNumber === null) throw new Error("Indiquez si vous avez déjà un numéro client.");
+        await save({ hasCustomerNumber: form.hasCustomerNumber, customerNumber: form.customerNumber });
+      }
+      if (step === 3) {
+        if (!form.infoCertificationAccepted) throw new Error("La certification est obligatoire pour commencer la souscription.");
+        await save({ infoCertificationAccepted: true });
+      }
+      if (step === 4) {
+        const addresses =
+          form.holderAddressSameAsPayer
+            ? []
+            : [{ ...form.holderAddress, type: "HOLDER" as const }];
+        await save({
+          holderAddressSameAsPayer: form.holderAddressSameAsPayer,
+          addresses,
+        });
+      }
+      if (step === 5) {
+        if (!form.payerAddress.street || !form.payerAddress.postalCode || !form.payerAddress.city) {
+          throw new Error("Complétez l'adresse du payeur.");
+        }
+        await save({
+          payerBirthDate: form.payerBirthDate || undefined,
+          addresses: [{ ...form.payerAddress, type: "PAYER" }],
+        });
+      }
+      if (step === 6) {
+        if (!form.schoolZipOrCity || !form.schoolName) throw new Error("Renseignez l'établissement scolaire.");
+        if (!form.photoFile || !form.identityFile) throw new Error("Ajoutez la photo et le justificatif d'identité pour continuer.");
+        await save({
+          schoolZipOrCity: form.schoolZipOrCity,
+          schoolName: form.schoolName,
+          imagineRSchoolLevel: form.schoolLevel,
+          scholarshipStatus: form.scholarshipStatus,
+          documents: [
+            ...(form.photoFile
+              ? [{
+                  documentType: "PHOTO" as const,
+                  label: "Photo du titulaire",
+                  simulatedFileName: form.photoFile.name,
+                  simulatedMimeType: form.photoFile.type,
+                  simulatedSizeBytes: form.photoFile.size,
+                }]
+              : []),
+            ...(form.identityFile
+              ? [{
+                  documentType: "ID_DOCUMENT" as const,
+                  label: "Justificatif d'identité",
+                  simulatedFileName: form.identityFile.name,
+                  simulatedMimeType: form.identityFile.type,
+                  simulatedSizeBytes: form.identityFile.size,
+                }]
+              : []),
+          ],
+        });
+      }
+      if (step === 8) {
+        if (!form.signatureInformationAccepted || !form.signaturePayerAccepted || !form.signatureTermsAccepted || !form.signatureDocumentsAccepted) {
+          throw new Error("Toutes les confirmations sont nécessaires.");
+        }
+        await save({
+          signatureInformationAccepted: true,
+          signaturePayerAccepted: true,
+          signatureTermsAccepted: true,
+          signatureDocumentsAccepted: true,
+        });
+      }
+      if (step === 9) {
+        const { accessToken, request } = await ensureDraft();
+        const submitted = await submitImagineRSubscriptionDraft(accessToken, request.id);
+        setDraft(submitted);
+      }
+
+      setStep((current) => Math.min(current + 1, steps.length - 1));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossible d'enregistrer cette étape.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout activeTab="titles" breadcrumbs={[{ href: "/", label: "Accueil" }, { label: "Imagine R" }]} subtitle="Chargement du dossier." summaryItems={["Brouillon"]} title="Souscription imagine R" userName="Mon espace">
+        <InfoBox>Chargement du parcours...</InfoBox>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout
+      activeTab="titles"
+      breadcrumbs={[
+        { href: "/", label: "Accueil" },
+        { href: "/dashboard/family", label: "Mon foyer Navigo" },
+        { href: "/dashboard/family/titles", label: "Titres" },
+        { label: "Imagine R" },
+      ]}
+      subtitle="Un parcours guidé pour créer une demande, sans créer d'abonnement actif automatiquement."
+      summaryItems={[
+        selectedMember ? `${selectedMember.firstName}, ${age ?? "-"} ans` : "Enfant à choisir",
+        selectedOffer?.name ?? "Offre imagine R",
+        draft?.status ?? "Brouillon",
+      ]}
+      title="Souscription imagine R Scolaire ou Junior"
+      userName={data.manager.firstName}
+    >
+      <div className="grid gap-8">
+        <div className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+          <SubscriptionStepper currentStep={step} steps={steps} />
+        </div>
+
+        {message ? <InfoBox>{message}</InfoBox> : null}
+
+        {step === 0 ? (
+          <SectionCard title="Pour quel enfant souhaitez-vous souscrire ?">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {youngMembers.map((member) => (
+                <ProfilePickerCard
+                  key={member.id}
+                  isSelected={member.id === selectedMember?.id}
+                  member={member}
+                  onSelect={() => {
+                    setSelectedMemberId(member.id);
+                    const offer = defaultOfferForMember(member, offers);
+                    setSelectedOfferId(offer?.id ?? null);
+                    setForm((current) => ({ ...current, schoolLevel: member.schoolLevel ?? current.schoolLevel }));
+                  }}
+                />
+              ))}
+            </div>
+            <InfoBox className="mt-5">Les informations connues du profil seront préremplies dans le dossier.</InfoBox>
+          </SectionCard>
+        ) : null}
+
+        {step === 1 ? (
+          <SectionCard title="L'élève disposait-il d'un forfait imagine R sur l'année scolaire 2025/2026 ?">
+            <ChoiceCards value={form.hasPreviousImagineR} onChange={(value) => setFormValue("hasPreviousImagineR", value)} />
+          </SectionCard>
+        ) : null}
+
+        {step === 2 ? (
+          <SectionCard title="Avez-vous déjà un numéro client ?">
+            <p className="mb-4 text-sm text-idfm-interaction">Où le trouver ? Il figure sur certains courriers ou contrats Navigo.</p>
+            <ChoiceCards value={form.hasCustomerNumber} onChange={(value) => setFormValue("hasCustomerNumber", value)} />
+            {form.hasCustomerNumber ? (
+              <div className="mt-5 max-w-md">
+                <Input label="Numéro client" value={form.customerNumber} onChange={(event) => setFormValue("customerNumber", event.target.value)} />
+              </div>
+            ) : null}
+          </SectionCard>
+        ) : null}
+
+        {step === 3 ? (
+          <SectionCard title="Avant de commencer">
+            <div className="grid gap-6 lg:grid-cols-[1fr_0.7fr]">
+              <div className="space-y-5 text-base leading-7 text-neutral-medium">
+                <p>
+                  Les forfaits imagine R Scolaire et Junior sont annuels, toutes zones, réservés aux élèves résidant en Île-de-France.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoBox>Junior : 17,20 € / an + 8 € de frais.</InfoBox>
+                  <InfoBox>Scolaire : 393,30 € / an + 8 € de frais.</InfoBox>
+                </div>
+                <p>Le dossier est traité sous 10 jours maximum hors week-end et jours fériés.</p>
+              </div>
+              <div className="rounded-3xl bg-idfm-light p-5">
+                <Badge tone="blue">Dossier suivi</Badge>
+                <p className="mt-4 font-bold text-idfm-anthracite">Vous retrouverez l'avancement depuis votre espace famille.</p>
+              </div>
+            </div>
+            <div className="mt-6">
+              <Checkbox
+                checked={form.infoCertificationAccepted}
+                label="Je certifie être majeur ou représentant légal, et titulaire légitime du moyen de paiement."
+                onChange={(event) => setFormValue("infoCertificationAccepted", event.target.checked)}
+              />
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {step === 4 && selectedMember ? (
+          <SectionCard title="Informations titulaire">
+            <p className="text-sm text-neutral-medium">Ces informations proviennent du profil de {selectedMember.firstName}.</p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Input label="Prénom" value={selectedMember.firstName} readOnly className="bg-neutral-xlight" />
+              <Input label="Nom" value={selectedMember.lastName} readOnly className="bg-neutral-xlight" />
+              <Input label="Date de naissance" value={selectedMember.birthDate ?? ""} readOnly className="bg-neutral-xlight" />
+              <Input label="Niveau scolaire" value={schoolLevelLabels[selectedMember.schoolLevel ?? form.schoolLevel]} readOnly className="bg-neutral-xlight" />
+            </div>
+            <div className="mt-6">
+              <Checkbox
+                checked={form.holderAddressSameAsPayer}
+                label="Utiliser la même adresse que le payeur"
+                description="Sinon, vous pouvez renseigner une adresse spécifique pour l'enfant."
+                onChange={(event) => setFormValue("holderAddressSameAsPayer", event.target.checked)}
+              />
+            </div>
+            {!form.holderAddressSameAsPayer ? (
+              <div className="mt-5">
+                <AddressForm address={form.holderAddress} onChange={(address) => setFormValue("holderAddress", address)} />
+              </div>
+            ) : null}
+          </SectionCard>
+        ) : null}
+
+        {step === 5 ? (
+          <SectionCard title="Informations payeur">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input label="Prénom" value={payer?.firstName ?? data.manager.firstName} readOnly className="bg-neutral-xlight" />
+              <Input label="Nom" value={payer?.lastName ?? data.manager.lastName} readOnly className="bg-neutral-xlight" />
+              <Input label="Date de naissance" type="date" value={form.payerBirthDate} onChange={(event) => setFormValue("payerBirthDate", event.target.value)} />
+            </div>
+            <div className="mt-5">
+              <AddressForm address={form.payerAddress} onChange={(address) => setFormValue("payerAddress", address)} />
+            </div>
+            <InfoBox className="mt-5">Pour un mineur, le payeur doit être majeur ou représentant légal.</InfoBox>
+          </SectionCard>
+        ) : null}
+
+        {step === 6 ? (
+          <SectionCard title="Préférences forfait">
+            <div className="grid gap-8">
+              <div>
+                <h3 className="text-xl font-bold text-idfm-anthracite">Photo du titulaire</h3>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <UploadBox file={form.photoFile} label="Charger une photo" onFile={(file) => setFormValue("photoFile", file)} />
+                  <div className="rounded-2xl bg-idfm-light p-5 text-sm leading-6 text-neutral-medium">
+                    Photo récente, de face, sur fond clair. Formats JPEG, PNG ou BMP.
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 rounded-2xl bg-neutral-xlight p-5">
+                <h3 className="text-xl font-bold text-idfm-anthracite">Date de début et récupération</h3>
+                <div className="rounded-2xl border border-idfm-interaction bg-white p-4">
+                  <p className="font-bold text-idfm-focus">À partir du 1er septembre 2026</p>
+                  <p className="mt-1 text-sm text-neutral-medium">Validité jusqu'au 30 septembre 2027.</p>
+                </div>
+                <div className="rounded-2xl border border-idfm-interaction bg-white p-4">
+                  <p className="font-bold text-idfm-focus">Au domicile du payeur</p>
+                  <p className="mt-1 text-sm text-neutral-medium">Le passe sera envoyé après validation du dossier.</p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-bold text-idfm-anthracite">Établissement scolaire</h3>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Input label="Code postal ou commune" placeholder="Ex : 75008 ou Paris 08" value={form.schoolZipOrCity} onChange={(event) => setFormValue("schoolZipOrCity", event.target.value)} />
+                  <Input label="Établissement" placeholder="Renseigner l'établissement" value={form.schoolName} onChange={(event) => setFormValue("schoolName", event.target.value)} />
+                  <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
+                    Niveau scolaire
+                    <select
+                      value={form.schoolLevel}
+                      onChange={(event) => setFormValue("schoolLevel", event.target.value as SchoolLevel)}
+                      className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
+                    >
+                      {Object.entries(schoolLevelLabels).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
+                    Boursier
+                    <select
+                      value={form.scholarshipStatus}
+                      onChange={(event) => setFormValue("scholarshipStatus", event.target.value as ImagineRScholarshipStatus)}
+                      className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
+                    >
+                      <option value="NO">Non</option>
+                      <option value="YES">Oui</option>
+                      <option value="UNKNOWN">Je ne sais pas encore</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-bold text-idfm-anthracite">Justificatif d'identité</h3>
+                <p className="mt-2 text-sm text-neutral-medium">Carte d'identité, passeport ou acte de naissance.</p>
+                <div className="mt-4">
+                  <UploadBox file={form.identityFile} label="Joindre le document" onFile={(file) => setFormValue("identityFile", file)} />
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {step === 7 ? (
+          <SectionCard title="Récapitulatif de votre demande">
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                ["Titulaire", `${selectedMember?.firstName} ${selectedMember?.lastName}`],
+                ["Payeur", `${payer?.firstName ?? data.manager.firstName} ${payer?.lastName ?? data.manager.lastName}`],
+                ["Offre", selectedOffer?.name ?? "Imagine R"],
+                ["Situation", computedSituation],
+                ["Début", "1er septembre 2026"],
+                ["Récupération", "Au domicile du payeur"],
+                ["Établissement", form.schoolName || "À compléter"],
+                ["Montant estimé", centsToEuro(draft?.imagineR?.totalAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 2520 : 40130))],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-idfm-light p-4">
+                  <p className="text-sm text-neutral-medium">{label}</p>
+                  <p className="mt-1 font-bold text-idfm-anthracite">{value}</p>
+                </div>
+              ))}
+            </div>
+            <InfoBox className="mt-5">Votre dossier sera traité sous 10 jours maximum après validation.</InfoBox>
+          </SectionCard>
+        ) : null}
+
+        {step === 8 ? (
+          <SectionCard title="Signature et consentements">
+            <div className="grid gap-3">
+              <Checkbox checked={form.signatureInformationAccepted} label="Je certifie l'exactitude des informations renseignées." onChange={(event) => setFormValue("signatureInformationAccepted", event.target.checked)} />
+              <Checkbox checked={form.signaturePayerAccepted} label="Je certifie être le payeur légitime ou le représentant légal." onChange={(event) => setFormValue("signaturePayerAccepted", event.target.checked)} />
+              <Checkbox checked={form.signatureTermsAccepted} label="J'accepte les conditions générales d'utilisation du service." onChange={(event) => setFormValue("signatureTermsAccepted", event.target.checked)} />
+              <Checkbox checked={form.signatureDocumentsAccepted} label="J'ai compris qu'une pièce non conforme peut entraîner le rejet de la demande." onChange={(event) => setFormValue("signatureDocumentsAccepted", event.target.checked)} />
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {step === 9 ? (
+          <SectionCard title="Paiement simulé">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl bg-idfm-light p-4">
+                <p className="text-sm text-neutral-medium">Forfait</p>
+                <p className="text-xl font-bold text-idfm-anthracite">{centsToEuro(draft?.imagineR?.baseAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 1720 : 39330))}</p>
+              </div>
+              <div className="rounded-2xl bg-idfm-light p-4">
+                <p className="text-sm text-neutral-medium">Frais de dossier</p>
+                <p className="text-xl font-bold text-idfm-anthracite">8,00 €</p>
+              </div>
+              <div className="rounded-2xl border border-idfm-interaction bg-white p-4">
+                <p className="text-sm text-neutral-medium">Total</p>
+                <p className="text-2xl font-bold text-idfm-focus">{centsToEuro(draft?.imagineR?.totalAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 2520 : 40130))}</p>
+              </div>
+            </div>
+            <InfoBox className="mt-5">Cette étape est simulée pour la démonstration. Aucun paiement réel ne sera effectué.</InfoBox>
+          </SectionCard>
+        ) : null}
+
+        {step === 10 && draft ? (
+          <SectionCard title="Votre demande de souscription est enregistrée">
+            <Badge tone="green">Dossier envoyé</Badge>
+            <p className="mt-4 text-base leading-7 text-neutral-medium">
+              Votre dossier imagine R a bien été créé. Vous pouvez suivre son avancement depuis votre espace famille.
+            </p>
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl bg-idfm-light p-4">
+                <p className="text-sm text-neutral-medium">Numéro de dossier</p>
+                <p className="font-bold text-idfm-anthracite">{draft.requestNumber ?? draft.id}</p>
+              </div>
+              <div className="rounded-2xl bg-idfm-light p-4">
+                <p className="text-sm text-neutral-medium">Titulaire</p>
+                <p className="font-bold text-idfm-anthracite">{draft.member.firstName} {draft.member.lastName}</p>
+              </div>
+              <div className="rounded-2xl bg-idfm-light p-4">
+                <p className="text-sm text-neutral-medium">Statut</p>
+                <p className="font-bold text-idfm-anthracite">{draft.status}</p>
+              </div>
+            </div>
+            <div className="mt-6">
+              <SubscriptionConfirmationTimeline timeline={draft.timeline} />
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link href="/dashboard/family" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white hover:bg-idfm-focus">
+                Retour à mon espace famille
+              </Link>
+              <Link href={`/dashboard/family/subscriptions/${draft.id}/confirmation`} className="inline-flex min-h-12 items-center justify-center rounded-md border border-idfm-interaction bg-white px-5 text-sm font-semibold text-idfm-interaction hover:bg-idfm-light">
+                Voir le suivi du dossier
+              </Link>
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {step < 10 ? (
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+            <Button type="button" variant="ghost" onClick={() => setStep((current) => Math.max(current - 1, 0))}>
+              Retour
+            </Button>
+            <Button type="button" onClick={next} disabled={isSaving || !selectedMember || !selectedOffer}>
+              {isSaving ? "Enregistrement..." : step === 9 ? "Confirmer la demande" : step === 8 ? "Signer et continuer" : "Continuer"}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </DashboardLayout>
+  );
+}
+
+export default function ImagineRSubscriptionPage() {
+  return (
+    <Suspense fallback={<InfoBox>Chargement du parcours imagine R...</InfoBox>}>
+      <ImagineRSubscriptionContent />
+    </Suspense>
+  );
+}
