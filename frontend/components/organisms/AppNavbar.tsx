@@ -20,15 +20,14 @@ type NavGroup = {
   label: string;
   href: string;
   children: NavChild[] | null;
-  requiresAuth?: boolean;
 };
 
-const navGroups: NavGroup[] = [
+// Liens affichés lorsque l'utilisateur est connecté
+const navGroupsAuth: NavGroup[] = [
   { label: "Accueil", href: "/", children: null },
   {
     label: "Mon espace famille",
     href: "/dashboard/family",
-    requiresAuth: true,
     children: [
       { href: "/dashboard/family", label: "Vue d'ensemble" },
       { href: "/dashboard/family?tab=profiles", label: "Mes profils" },
@@ -53,12 +52,21 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+// Liens affichés pour les visiteurs non connectés (sections de la page d'accueil)
+const navGroupsGuest: NavGroup[] = [
+  { label: "Accueil", href: "/", children: null },
+  { label: "Notre solution", href: "/#solution", children: null },
+  { label: "Pour qui ?", href: "/#cibles", children: null },
+  { label: "Actions utiles", href: "/#actions", children: null },
+  { label: "Signaler un passé trouvé", href: "/found-pass", children: null },
+];
+
 const mobileLinksGuest = [
   { href: "/", label: "Accueil" },
-  { href: "/dashboard/family?tab=services", label: "Services" },
+  { href: "/#solution", label: "Notre solution" },
+  { href: "/#cibles", label: "Pour qui ?" },
+  { href: "/#actions", label: "Actions utiles" },
   { href: "/found-pass", label: "Signaler un passé trouvé" },
-  { href: "/dashboard/family?tab=help", label: "Aide et contacts" },
-  { href: "/dashboard/family?tab=alerts", label: "Mes alertes" },
 ];
 
 const mobileLinksAuth = [
@@ -314,7 +322,7 @@ export function AppNavbar({ userName }: AppNavbarProps) {
 
           {/* Navigation desktop avec dropdowns */}
           <nav className="hidden items-stretch lg:flex" aria-label="Navigation principale">
-            {navGroups.filter((g) => !g.requiresAuth || isConnected).map((group) => (
+            {(isConnected ? navGroupsAuth : navGroupsGuest).map((group) => (
               <div key={group.label} className="relative flex items-stretch">
                 {group.children ? (
                   <button
