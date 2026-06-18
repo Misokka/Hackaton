@@ -203,14 +203,29 @@ export function AppNavbar({ userName }: AppNavbarProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentSearch, setCurrentSearch] = useState("");
 
   useEffect(() => {
     startTransition(() => {
       setHasMounted(true);
       setIsConnected(Boolean(localStorage.getItem("familyAccessToken")));
       setDisplayName(userName || getStoredUserName());
+      setCurrentSearch(window.location.search);
     });
   }, [userName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    setCurrentSearch(window.location.search);
+
+    function handleHistoryChange() {
+      setCurrentSearch(window.location.search);
+    }
+
+    window.addEventListener("popstate", handleHistoryChange);
+    return () => window.removeEventListener("popstate", handleHistoryChange);
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -247,8 +262,48 @@ export function AppNavbar({ userName }: AppNavbarProps) {
   }
 
   function isActivePath(href: string) {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href.split("?")[0]);
+    const [pathWithHash, queryString] = href.split("?");
+    const path = pathWithHash.split("#")[0] || "/";
+
+    if (path === "/") return pathname === "/" && !queryString;
+    if (pathname !== path && !pathname.startsWith(`${path}/`)) return false;
+
+    if (!queryString) return true;
+
+    const expectedTab = new URLSearchParams(queryString).get("tab");
+    return expectedTab
+      ? new URLSearchParams(currentSearch).get("tab") === expectedTab
+      : true;
+  }
+
+  function isActiveNavGroup(group: NavGroup) {
+    if (!group.children) return isActivePath(group.href);
+
+    if (group.href === "/dashboard/family") {
+      const tab = new URLSearchParams(currentSearch).get("tab");
+      return (
+        pathname.startsWith("/dashboard/family") &&
+        (!tab || ["profiles", "titles", "demarches"].includes(tab))
+      );
+    }
+
+    return group.children.some((child) => isActivePath(child.href));
+  }
+
+  function desktopNavClass(isActive: boolean) {
+    const base =
+      "relative flex items-center px-4 text-sm font-semibold transition after:absolute after:bottom-0 after:left-4 after:right-4 after:h-0.5 after:origin-center after:rounded-full after:transition-transform";
+
+    return `${base} ${
+      isActive
+        ? "text-white after:scale-x-100 after:bg-white"
+        : "text-white/85 after:scale-x-0 after:bg-white/80 hover:bg-white/10 hover:text-white hover:after:scale-x-100"
+    }`;
+  }
+
+  function trackNavigationTarget(href: string) {
+    if (typeof window === "undefined") return;
+    setCurrentSearch(new URL(href, window.location.origin).search);
   }
 
   function toggleDropdown(label: string) {
@@ -338,61 +393,61 @@ export function AppNavbar({ userName }: AppNavbarProps) {
             className="hidden items-stretch lg:flex"
             aria-label="Navigation principale"
           >
-            {(isConnected ? navGroupsAuth : navGroupsGuest).map((group) => (
-              <div key={group.label} className="relative flex items-stretch">
-                {group.children ? (
-                  <button
-                    type="button"
-                    aria-expanded={openDropdown === group.label}
-                    aria-haspopup="true"
-                    onClick={() => toggleDropdown(group.label)}
-                    className={`flex items-center gap-1.5 px-4 text-sm font-semibold transition ${
-                      isActivePath(group.href)
-                        ? "border-b-2 border-white text-white"
-                        : "border-b-2 border-transparent text-white/85 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    {group.label}
-                    <ChevronDownIcon
-                      className={`transition-transform duration-200 ${
-                        openDropdown === group.label ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                ) : (
-                  <Link
-                    href={group.href}
-                    className={`flex items-center px-4 text-sm font-semibold transition ${
-                      isActivePath(group.href)
-                        ? "border-b-2 border-white text-white"
-                        : "border-b-2 border-transparent text-white/85 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    {group.label}
-                  </Link>
-                )}
+            {(isConnected ? navGroupsAuth : navGroupsGuest).map((group) => {
+              const isActive = isActiveNavGroup(group);
 
-                {/* Panneau dropdown */}
-                {group.children && openDropdown === group.label && (
-                  <div className="absolute left-0 top-full min-w-[220px] overflow-hidden rounded-b-xl bg-white shadow-xl ring-1 ring-black/8">
-                    {group.children.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={() => setOpenDropdown(null)}
-                        className={`block px-5 py-3.5 text-sm transition hover:bg-idfm-light ${
-                          isActivePath(child.href)
-                            ? "font-semibold text-idfm-interaction"
-                            : "text-idfm-anthracite"
+              return (
+                <div key={group.label} className="relative flex items-stretch">
+                  {group.children ? (
+                    <button
+                      type="button"
+                      aria-expanded={openDropdown === group.label}
+                      aria-haspopup="true"
+                      onClick={() => toggleDropdown(group.label)}
+                      className={`${desktopNavClass(isActive)} gap-1.5`}
+                    >
+                      {group.label}
+                      <ChevronDownIcon
+                        className={`transition-transform duration-200 ${
+                          openDropdown === group.label ? "rotate-180" : ""
                         }`}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                      />
+                    </button>
+                  ) : (
+                    <Link
+                      href={group.href}
+                      onClick={() => trackNavigationTarget(group.href)}
+                      className={desktopNavClass(isActive)}
+                    >
+                      {group.label}
+                    </Link>
+                  )}
+
+                  {/* Panneau dropdown */}
+                  {group.children && openDropdown === group.label && (
+                    <div className="absolute left-0 top-full min-w-[220px] overflow-hidden rounded-b-xl bg-white shadow-xl ring-1 ring-black/8">
+                      {group.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => {
+                            setOpenDropdown(null);
+                            trackNavigationTarget(child.href);
+                          }}
+                          className={`block px-5 py-3.5 text-sm transition hover:bg-idfm-light ${
+                            isActivePath(child.href)
+                              ? "font-semibold text-idfm-interaction"
+                              : "text-idfm-anthracite"
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
           {/* Actions — droite */}
@@ -469,21 +524,30 @@ export function AppNavbar({ userName }: AppNavbarProps) {
                       </div>
                       <Link
                         href="/dashboard/family"
-                        onClick={() => setIsUserMenuOpen(false)}
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          trackNavigationTarget("/dashboard/family");
+                        }}
                         className="block px-5 py-3 text-sm text-idfm-anthracite transition hover:bg-idfm-light"
                       >
                         Mon espace famille
                       </Link>
                       <Link
                         href="/dashboard/family?tab=profiles"
-                        onClick={() => setIsUserMenuOpen(false)}
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          trackNavigationTarget("/dashboard/family?tab=profiles");
+                        }}
                         className="block px-5 py-3 text-sm text-idfm-anthracite transition hover:bg-idfm-light"
                       >
                         Mes profils
                       </Link>
                       <Link
                         href="/dashboard/family?tab=titles"
-                        onClick={() => setIsUserMenuOpen(false)}
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          trackNavigationTarget("/dashboard/family?tab=titles");
+                        }}
                         className="block px-5 py-3 text-sm text-idfm-anthracite transition hover:bg-idfm-light"
                       >
                         Mes titres
@@ -575,7 +639,10 @@ export function AppNavbar({ userName }: AppNavbarProps) {
                   <Link
                     key={link.href}
                     href={link.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      trackNavigationTarget(link.href);
+                    }}
                     className={`flex items-center px-5 py-3.5 text-sm font-medium transition ${
                       index < arr.length - 1
                         ? "border-b border-neutral-light"
@@ -598,7 +665,10 @@ export function AppNavbar({ userName }: AppNavbarProps) {
                 <>
                   <Link
                     href="/dashboard/family"
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      trackNavigationTarget("/dashboard/family");
+                    }}
                     className="flex items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
                   >
                     <UserIcon />
