@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import type { DocumentType } from "@prisma/client";
+import type { DocumentType, SubscriptionRequestStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { extname, join } from "path";
@@ -8,14 +8,14 @@ import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request
 import { CreateImagineRDraftDto, UpdateImagineRRequestDto } from "./dtos/imagine-r-subscription-request.dto";
 import { UpdateSubscriptionRequestDto } from "./dtos/update-subscription-request.dto";
 
-const OPEN_SUBSCRIPTION_REQUEST_STATUSES = [
+const OPEN_SUBSCRIPTION_REQUEST_STATUSES: SubscriptionRequestStatus[] = [
   "DRAFT",
   "WAITING_DOCUMENTS",
   "UNDER_REVIEW",
   "PAYMENT_PENDING",
   "CONFIRMED",
   "BLOCKED",
-] as const;
+];
 
 @Injectable()
 export class SubscriptionRequestsService {

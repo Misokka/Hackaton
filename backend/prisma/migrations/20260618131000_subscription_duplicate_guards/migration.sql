@@ -23,6 +23,24 @@ WHERE id IN (
   WHERE rank > 1
 );
 
+WITH ranked_active_subscriptions AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY "householdMemberId"
+      ORDER BY "updatedAt" DESC, "createdAt" DESC
+    ) AS rank
+  FROM "Subscription"
+  WHERE "status" = 'ACTIVE'
+)
+UPDATE "Subscription"
+SET "status" = 'EXPIRED'
+WHERE id IN (
+  SELECT id
+  FROM ranked_active_subscriptions
+  WHERE rank > 1
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_one_active_per_member_idx"
   ON "Subscription"("householdMemberId")
   WHERE "status" = 'ACTIVE';
