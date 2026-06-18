@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { DocumentType } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
@@ -7,6 +7,15 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request.dto";
 import { CreateImagineRDraftDto, UpdateImagineRRequestDto } from "./dtos/imagine-r-subscription-request.dto";
 import { UpdateSubscriptionRequestDto } from "./dtos/update-subscription-request.dto";
+
+const OPEN_SUBSCRIPTION_REQUEST_STATUSES = [
+  "DRAFT",
+  "WAITING_DOCUMENTS",
+  "UNDER_REVIEW",
+  "PAYMENT_PENDING",
+  "CONFIRMED",
+  "BLOCKED",
+] as const;
 
 @Injectable()
 export class SubscriptionRequestsService {
@@ -351,6 +360,84 @@ export class SubscriptionRequestsService {
     return household;
   }
 
+  private async findActiveSubscriptionForMember(memberId: string) {
+    return this.prismaService.subscription.findFirst({
+      where: {
+        householdMemberId: memberId,
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  private async findOpenRequestForMember(memberId: string, excludeRequestId?: string) {
+    return this.prismaService.subscriptionRequest.findFirst({
+      where: {
+        memberId,
+        status: { in: OPEN_SUBSCRIPTION_REQUEST_STATUSES },
+        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+      },
+      include: this.requestInclude,
+      orderBy: [
+        { updatedAt: "desc" },
+        { createdAt: "desc" },
+      ],
+    });
+  }
+
+  private async ensureRequestCanBeCreated(memberId: string, offerId: string) {
+    const activeSubscription = await this.findActiveSubscriptionForMember(memberId);
+
+    if (activeSubscription) {
+      throw new ConflictException({
+        code: "ACTIVE_TITLE_EXISTS",
+        message: "Ce profil possède déjà un titre actif.",
+        existingTitleId: activeSubscription.id,
+        existingTitleStatus: activeSubscription.status,
+      });
+    }
+
+    const openRequest = await this.findOpenRequestForMember(memberId);
+
+    if (!openRequest) {
+      return null;
+    }
+
+    if (openRequest.status === "DRAFT" && openRequest.offerId === offerId) {
+      return openRequest;
+    }
+
+    throw new ConflictException({
+      code: "OPEN_REQUEST_EXISTS",
+      message: "Une demande est déjà en cours pour ce profil.",
+      existingRequestId: openRequest.id,
+      existingRequestStatus: openRequest.status,
+    });
+  }
+
+  private async ensureImagineRCanBeSubmitted(memberId: string, currentRequestId: string) {
+    const activeSubscription = await this.findActiveSubscriptionForMember(memberId);
+
+    if (activeSubscription) {
+      throw new ConflictException({
+        code: "ACTIVE_TITLE_EXISTS",
+        message: "Ce profil possède déjà un titre actif.",
+        existingTitleId: activeSubscription.id,
+        existingTitleStatus: activeSubscription.status,
+      });
+    }
+
+    const otherOpenRequest = await this.findOpenRequestForMember(memberId, currentRequestId);
+
+    if (otherOpenRequest) {
+      throw new ConflictException({
+        code: "OPEN_REQUEST_EXISTS",
+        message: "Une autre demande est déjà en cours pour ce profil.",
+        existingRequestId: otherOpenRequest.id,
+        existingRequestStatus: otherOpenRequest.status,
+      });
+    }
+  }
+
   async createForUser(userId: string, data: CreateSubscriptionRequestDto) {
     const household = await this.findHouseholdForUser(userId);
     const member = household.members.find((candidate) => candidate.id === data.householdMemberId);
@@ -380,6 +467,12 @@ export class SubscriptionRequestsService {
 
     if (!offer || !offer.isActive) {
       throw new NotFoundException("Offre introuvable.");
+    }
+
+    const existingDraft = await this.ensureRequestCanBeCreated(member.id, offer.id);
+
+    if (existingDraft) {
+      return this.formatRequest(existingDraft);
     }
 
     const created = await this.prismaService.$transaction(async (tx) => {
@@ -455,6 +548,12 @@ export class SubscriptionRequestsService {
 
     if (!offer || !offer.isActive || !this.isImagineROffer(offer.productType)) {
       throw new BadRequestException("Cette offre n'est pas compatible avec le parcours imagine R.");
+    }
+
+    const existingDraft = await this.ensureRequestCanBeCreated(member.id, offer.id);
+
+    if (existingDraft) {
+      return this.formatRequest(existingDraft);
     }
 
     const requiredDocuments = this.buildImagineRRequiredDocuments(offer.productType, offer.requiredDocuments);
@@ -732,6 +831,8 @@ export class SubscriptionRequestsService {
     ) {
       throw new BadRequestException("Les confirmations de signature sont nécessaires.");
     }
+
+    await this.ensureImagineRCanBeSubmitted(existing.memberId, existing.id);
 
     const updated = await this.prismaService.$transaction(async (tx) => {
       await tx.subscriptionDocument.updateMany({

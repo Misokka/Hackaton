@@ -5,7 +5,9 @@ const ADMIN_SUBSCRIPTION_REQUEST_STATUSES = [
   "WAITING_DOCUMENTS",
   "CONFIRMED",
   "BLOCKED",
+  "CANCELLED",
   "REJECTED",
+  "EXPIRED",
 ] as const;
 
 export class UpdateAdminSubscriptionRequestDto {

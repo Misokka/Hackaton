@@ -37,12 +37,24 @@ type DashboardPendingRequest = {
     | "CONFIRMED"
     | "ACTIVE"
     | "BLOCKED"
-    | "CANCELLED";
+    | "CANCELLED"
+    | "REJECTED"
+    | "EXPIRED";
   offerName: string;
   offerSlug: string;
+  offerProductType: string;
+  flowType: "GENERIC" | "IMAGINE_R" | null;
   updatedAt: string;
   renewal: DashboardPendingRenewal;
 };
+
+type DashboardTitleActionStatus =
+  | "NO_TITLE"
+  | "REQUEST_DRAFT"
+  | "REQUEST_IN_PROGRESS"
+  | "ACTIVE_TITLE"
+  | "TITLE_TO_RENEW"
+  | "TITLE_EXPIRED";
 
 type DashboardMember = {
   id: string;
@@ -64,6 +76,7 @@ type DashboardMember = {
   isLegalRepresentative: boolean;
   isDemoProfile: boolean;
   hasActiveTitle: boolean;
+  titleActionStatus: DashboardTitleActionStatus;
   pendingRequest: DashboardPendingRequest | null;
 };
 
@@ -107,6 +120,15 @@ type HouseholdProcedure = {
   nextAction: string;
   detailUrl: string;
 };
+
+const OPEN_SUBSCRIPTION_REQUEST_STATUSES = [
+  "DRAFT",
+  "WAITING_DOCUMENTS",
+  "UNDER_REVIEW",
+  "PAYMENT_PENDING",
+  "CONFIRMED",
+  "BLOCKED",
+];
 
 @Injectable()
 export class HouseholdsService {
@@ -332,6 +354,7 @@ export class HouseholdsService {
         offer: {
           name: string;
           slug: string;
+          productType: string;
         };
       }>;
     },
@@ -339,8 +362,11 @@ export class HouseholdsService {
   ): DashboardMember {
     const profileType = this.getEffectiveProfileType(member);
     const defaults = this.getDefaultProfileState(profileType);
-    const latestSubscription = member.subscriptions[0] ?? null;
-    const hasActiveTitle = Boolean(latestSubscription);
+    const activeSubscription = member.subscriptions.find((subscription) => subscription.status === "ACTIVE") ?? null;
+    const subscriptionToRenew = member.subscriptions.find((subscription) => subscription.status === "TO_RENEW") ?? null;
+    const expiredSubscription = member.subscriptions.find((subscription) => subscription.status === "EXPIRED") ?? null;
+    const latestSubscription = activeSubscription ?? subscriptionToRenew ?? expiredSubscription ?? member.subscriptions[0] ?? null;
+    const hasActiveTitle = Boolean(activeSubscription);
     const hasOpenLostPass = member.supportCases.some(
       (supportCase) =>
         supportCase.type === "LOST_PASS" &&
@@ -352,10 +378,21 @@ export class HouseholdsService {
           "PHYSICAL_PASS_REACTIVATED",
         ].includes(supportCase.status),
     );
-    const latestOpenRequest = member.subscriptionRequests.find(
-      (request) => !["ACTIVE", "CANCELLED", "BLOCKED"].includes(request.status),
+    const latestOpenRequest = member.subscriptionRequests.find((request) =>
+      OPEN_SUBSCRIPTION_REQUEST_STATUSES.includes(request.status),
     );
     const pendingRequest = latestOpenRequest ? this.formatPendingRequest(latestOpenRequest) : null;
+    const titleActionStatus: DashboardTitleActionStatus = activeSubscription
+      ? "ACTIVE_TITLE"
+      : subscriptionToRenew
+        ? "TITLE_TO_RENEW"
+        : expiredSubscription
+          ? "TITLE_EXPIRED"
+          : pendingRequest?.status === "DRAFT"
+            ? "REQUEST_DRAFT"
+            : pendingRequest
+              ? "REQUEST_IN_PROGRESS"
+              : "NO_TITLE";
 
     const relationLabel =
       profileType === "MANAGER"
@@ -397,6 +434,7 @@ export class HouseholdsService {
       isLegalRepresentative: member.isLegalRepresentative,
       isDemoProfile: false,
       hasActiveTitle,
+      titleActionStatus,
       pendingRequest,
     };
   }
@@ -440,6 +478,7 @@ export class HouseholdsService {
     id: string;
     requestNumber: string | null;
     status: string;
+    flowType?: "GENERIC" | "IMAGINE_R" | null;
     updatedAt: Date;
     autoRenewalEnabled: boolean;
     renewalType: "ANNUAL" | "MONTHLY" | null;
@@ -452,6 +491,7 @@ export class HouseholdsService {
     offer: {
       name: string;
       slug: string;
+      productType: string;
     };
   }): DashboardPendingRequest {
     return {
@@ -460,6 +500,8 @@ export class HouseholdsService {
       status: request.status as DashboardPendingRequest["status"],
       offerName: request.offer.name,
       offerSlug: request.offer.slug,
+      offerProductType: request.offer.productType,
+      flowType: request.flowType ?? null,
       updatedAt: request.updatedAt.toISOString(),
       renewal: this.formatPendingRenewal(request),
     };
@@ -471,8 +513,8 @@ export class HouseholdsService {
     const pendingRequestsByMember = new Map<string, DashboardPendingRequest>();
 
     household.members.forEach((member) => {
-      const latestOpenRequest = member.subscriptionRequests.find(
-        (request) => !["ACTIVE", "CANCELLED", "BLOCKED"].includes(request.status),
+      const latestOpenRequest = member.subscriptionRequests.find((request) =>
+        OPEN_SUBSCRIPTION_REQUEST_STATUSES.includes(request.status),
       );
 
       if (latestOpenRequest) {
