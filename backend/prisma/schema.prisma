@@ -98,6 +98,7 @@ enum SubscriptionRequestStatus {
   CONFIRMED
   ACTIVE
   BLOCKED
+  REJECTED
   CANCELLED
 }
 
@@ -391,6 +392,8 @@ model SubscriptionRequest {
   signedAt                    DateTime?
   paymentSimulatedAt          DateTime?
   submittedAt                 DateTime?
+  reviewedAt                  DateTime?
+  rejectionReason             String?
   addresses                  SubscriptionRequestAddress[]
   documents                  SubscriptionDocument[]
   createdAt                  DateTime                  @default(now())
@@ -435,6 +438,7 @@ model SubscriptionDocument {
   simulatedFileName      String?
   simulatedMimeType      String?
   simulatedSizeBytes     Int?
+  simulatedPreviewDataUrl String?
   uploadedAt             DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
@@ -462,6 +466,7 @@ model Subscription {
   productType      SubscriptionProductType
   productName      String
   status           SubscriptionStatus
+  sourceRequestId  String?                 @unique
   nextActionLabel  String?
   recommendedProduct String?
   renewalDate      DateTime?

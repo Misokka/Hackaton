@@ -8,6 +8,7 @@ const SUBSCRIPTION_REQUEST_STATUSES = [
   "CONFIRMED",
   "ACTIVE",
   "BLOCKED",
+  "REJECTED",
   "CANCELLED",
 ] as const;
 

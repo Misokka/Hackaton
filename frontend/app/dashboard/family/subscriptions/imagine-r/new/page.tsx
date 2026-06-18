@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/atoms/Badge";
@@ -83,8 +83,8 @@ type FormState = {
   schoolName: string;
   schoolLevel: SchoolLevel;
   scholarshipStatus: ImagineRScholarshipStatus;
-  photoFile: { name: string; type: string; size: number } | null;
-  identityFile: { name: string; type: string; size: number } | null;
+  photoFile: { name: string; type: string; size: number; previewDataUrl: string | null } | null;
+  identityFile: { name: string; type: string; size: number; previewDataUrl: string | null } | null;
   autoRenewalEnabled: boolean;
   signatureInformationAccepted: boolean;
   signaturePayerAccepted: boolean;
@@ -220,6 +220,15 @@ function UploadBox({
   label: string;
   onFile: (file: FormState["photoFile"]) => void;
 }) {
+  function readPreviewDataUrl(file: File) {
+    return new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
   return (
     <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-idfm-interaction bg-white p-5 text-center transition hover:bg-idfm-light focus-within:ring-3 focus-within:ring-idfm-medium">
       <span className="text-lg font-bold text-idfm-interaction">{file ? file.name : label}</span>
@@ -229,7 +238,19 @@ function UploadBox({
         className="sr-only"
         onChange={(event) => {
           const selectedFile = event.target.files?.[0];
-          onFile(selectedFile ? { name: selectedFile.name, type: selectedFile.type, size: selectedFile.size } : null);
+          if (!selectedFile) {
+            onFile(null);
+            return;
+          }
+
+          void readPreviewDataUrl(selectedFile).then((previewDataUrl) => {
+            onFile({
+              name: selectedFile.name,
+              type: selectedFile.type,
+              size: selectedFile.size,
+              previewDataUrl,
+            });
+          });
         }}
       />
     </label>
@@ -341,10 +362,7 @@ function ImagineRSubscriptionContent() {
   const data = dashboard ?? familyDashboardMock;
   const youngMembers = data.members.filter((member) => member.profileType === "YOUNG");
   const selectedMember = youngMembers.find((member) => member.id === selectedMemberId) ?? youngMembers[0];
-  const selectedOffer = useMemo(
-    () => offers.find((offer) => offer.id === selectedOfferId) ?? defaultOfferForMember(selectedMember, offers),
-    [offers, selectedMember, selectedOfferId],
-  );
+  const selectedOffer = offers.find((offer) => offer.id === selectedOfferId) ?? defaultOfferForMember(selectedMember, offers);
   const payer = data.members.find((member) => member.id === data.manager.id) ?? data.members[0];
   const age = getAge(selectedMember?.birthDate ?? null);
   const computedSituation =
@@ -447,6 +465,7 @@ function ImagineRSubscriptionContent() {
                   simulatedFileName: form.photoFile.name,
                   simulatedMimeType: form.photoFile.type,
                   simulatedSizeBytes: form.photoFile.size,
+                  simulatedPreviewDataUrl: form.photoFile.previewDataUrl ?? undefined,
                 }]
               : []),
             ...(form.identityFile
@@ -456,6 +475,7 @@ function ImagineRSubscriptionContent() {
                   simulatedFileName: form.identityFile.name,
                   simulatedMimeType: form.identityFile.type,
                   simulatedSizeBytes: form.identityFile.size,
+                  simulatedPreviewDataUrl: form.identityFile.previewDataUrl ?? undefined,
                 }]
               : []),
           ],
@@ -573,7 +593,7 @@ function ImagineRSubscriptionContent() {
               </div>
               <div className="rounded-3xl bg-idfm-light p-5">
                 <Badge tone="blue">Dossier suivi</Badge>
-                <p className="mt-4 font-bold text-idfm-anthracite">Vous retrouverez l'avancement depuis votre espace famille.</p>
+                <p className="mt-4 font-bold text-idfm-anthracite">Vous retrouverez l&apos;avancement depuis votre espace famille.</p>
               </div>
             </div>
             <div className="mt-6">
@@ -642,7 +662,7 @@ function ImagineRSubscriptionContent() {
                 <h3 className="text-xl font-bold text-idfm-anthracite">Date de début et récupération</h3>
                 <div className="rounded-2xl border border-idfm-interaction bg-white p-4">
                   <p className="font-bold text-idfm-focus">À partir du 1er septembre 2026</p>
-                  <p className="mt-1 text-sm text-neutral-medium">Validité jusqu'au 30 septembre 2027.</p>
+                  <p className="mt-1 text-sm text-neutral-medium">Validité jusqu&apos;au 30 septembre 2027.</p>
                 </div>
                 <div className="rounded-2xl border border-idfm-interaction bg-white p-4">
                   <p className="font-bold text-idfm-focus">Au domicile du payeur</p>
@@ -657,7 +677,7 @@ function ImagineRSubscriptionContent() {
                 </div>
                 <h3 className="mt-4 text-xl font-bold text-idfm-anthracite">Renouvellement automatique</h3>
                 <p className="mt-2 text-sm leading-6 text-neutral-medium">
-                  Évitez l'oubli à la prochaine rentrée. Vous recevrez un rappel et vous gardez la main.
+                  Évitez l&apos;oubli à la prochaine rentrée. Vous recevrez un rappel et vous gardez la main.
                 </p>
                 <div className="mt-4">
                   <Checkbox
@@ -669,7 +689,7 @@ function ImagineRSubscriptionContent() {
                 </div>
                 {form.autoRenewalEnabled ? (
                   <InfoBox className="mt-4">
-                    Vous pourrez annuler avant l'échéance. Des justificatifs pourront être redemandés si nécessaire,
+                    Vous pourrez annuler avant l&apos;échéance. Des justificatifs pourront être redemandés si nécessaire,
                     sans refaire toute la souscription.
                   </InfoBox>
                 ) : null}
@@ -679,7 +699,7 @@ function ImagineRSubscriptionContent() {
                 <h3 className="text-xl font-bold text-idfm-anthracite">Établissement scolaire</h3>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Input label="Code postal ou commune" placeholder="Ex : 75008 ou Paris 08" value={form.schoolZipOrCity} onChange={(event) => setFormValue("schoolZipOrCity", event.target.value)} />
-                  <Input label="Établissement" placeholder="Renseigner l'établissement" value={form.schoolName} onChange={(event) => setFormValue("schoolName", event.target.value)} />
+                  <Input label="Établissement" placeholder="Renseigner l&apos;établissement" value={form.schoolName} onChange={(event) => setFormValue("schoolName", event.target.value)} />
                   <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
                     Niveau scolaire
                     <select
@@ -708,8 +728,8 @@ function ImagineRSubscriptionContent() {
               </div>
 
               <div>
-                <h3 className="text-xl font-bold text-idfm-anthracite">Justificatif d'identité</h3>
-                <p className="mt-2 text-sm text-neutral-medium">Carte d'identité, passeport ou acte de naissance.</p>
+                <h3 className="text-xl font-bold text-idfm-anthracite">Justificatif d&apos;identité</h3>
+                <p className="mt-2 text-sm text-neutral-medium">Carte d&apos;identité, passeport ou acte de naissance.</p>
                 <div className="mt-4">
                   <UploadBox file={form.identityFile} label="Joindre le document" onFile={(file) => setFormValue("identityFile", file)} />
                 </div>

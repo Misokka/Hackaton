@@ -59,6 +59,7 @@ const requestStatusLabels: Record<SubscriptionRequestStatus, string> = {
   CONFIRMED: "Confirmee",
   ACTIVE: "Active",
   BLOCKED: "Bloquee",
+  REJECTED: "Refusee",
   CANCELLED: "Annulee",
 };
 
@@ -359,16 +360,30 @@ export default function AdminDashboardPage() {
       <div className="grid gap-6">
         {error ? <InfoBox tone="red">{error}</InfoBox> : null}
 
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
-          <div>
-            <h2 className="text-lg font-bold text-idfm-anthracite">Centre SOS Navigo</h2>
-            <p className="mt-1 text-sm text-neutral-medium">
-              Retrouver un dossier, enregistrer un pass retrouve et notifier une famille.
-            </p>
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
+            <div>
+              <h2 className="text-lg font-bold text-idfm-anthracite">Demandes de titres</h2>
+              <p className="mt-1 text-sm text-neutral-medium">
+                Valider les justificatifs et créer les titres actifs après contrôle.
+              </p>
+            </div>
+            <Link href="/admin/titles" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
+              Ouvrir les demandes
+            </Link>
           </div>
-          <Link href="/admin/sos-navigo" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
-            Ouvrir SOS Navigo
-          </Link>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
+            <div>
+              <h2 className="text-lg font-bold text-idfm-anthracite">Centre SOS Navigo</h2>
+              <p className="mt-1 text-sm text-neutral-medium">
+                Retrouver un dossier, enregistrer un pass retrouve et notifier une famille.
+              </p>
+            </div>
+            <Link href="/admin/sos-navigo" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
+              Ouvrir SOS Navigo
+            </Link>
+          </div>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">

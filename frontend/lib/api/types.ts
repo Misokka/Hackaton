@@ -116,6 +116,7 @@ export type SubscriptionRequestStatus =
   | "CONFIRMED"
   | "ACTIVE"
   | "BLOCKED"
+  | "REJECTED"
   | "CANCELLED";
 
 export type SubscriptionRenewalType = "ANNUAL" | "MONTHLY";
@@ -454,6 +455,7 @@ export type ImagineRDocumentUploadPayload = {
   simulatedFileName?: string;
   simulatedMimeType?: string;
   simulatedSizeBytes?: number;
+  simulatedPreviewDataUrl?: string;
 };
 
 export type UpdateImagineRSubscriptionPayload = {
@@ -482,6 +484,8 @@ export type SubscriptionRequestResponse = {
   requestNumber: string | null;
   flowType: SubscriptionRequestFlow;
   status: SubscriptionRequestStatus;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
   autoRenewalEnabled: boolean;
   renewal: SubscriptionRenewal;
   intelligentDossierEnabled: boolean;
@@ -521,6 +525,7 @@ export type SubscriptionRequestResponse = {
     simulatedFileName?: string | null;
     simulatedMimeType?: string | null;
     simulatedSizeBytes?: number | null;
+    simulatedPreviewDataUrl?: string | null;
     uploadedAt?: string | null;
   }>;
   imagineR: {
@@ -596,34 +601,57 @@ export type AdminFamilySummary = {
 
 export type AdminSubscriptionRequest = {
   id: string;
+  requestNumber: string | null;
+  dossierNumber: string;
+  flowType: SubscriptionRequestFlow;
   status: SubscriptionRequestStatus;
   autoRenewalEnabled: boolean;
   intelligentDossierEnabled: boolean;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
+  submittedAt: string | null;
+  paymentSimulatedAt: string | null;
+  documentCounts: {
+    validated: number;
+    total: number;
+  };
   household: {
     id: string;
     customerNumber: string;
     name: string;
     ownerName: string;
+    ownerEmail: string;
+    ownerPhone: string;
   };
   member: {
     id: string;
     firstName: string;
     lastName: string;
+    birthDate: string | null;
+    age: number | null;
     profileType: DashboardMemberProfileType;
+    relationship: "SELF" | "CHILD" | "RELATIVE";
+    schoolLevel: SchoolLevel | null;
+    department: string | null;
   };
   payer: {
     id: string;
     firstName: string;
     lastName: string;
-  } | null;
+    email: string;
+    phone: string;
+    role: string;
+  };
   offer: {
     id: string;
     slug: string;
     name: string;
     productType: OfferProductType;
     priceLabel: string;
+    durationLabel: string;
+    targetProfile: OfferTargetProfile;
   };
   documents: Array<{
     id: string;
@@ -631,7 +659,55 @@ export type AdminSubscriptionRequest = {
     documentType: OfferDocumentType;
     status: SubscriptionDocumentStatus;
     rejectionReason: string | null;
+    simulatedFileName?: string | null;
+    simulatedMimeType?: string | null;
+    simulatedSizeBytes?: number | null;
+    simulatedPreviewDataUrl?: string | null;
+    uploadedAt?: string | null;
   }>;
+};
+
+export type AdminSubscriptionRequestFilter =
+  | "all"
+  | "to-review"
+  | "incomplete"
+  | "processing"
+  | "approved"
+  | "rejected"
+  | "blocked";
+
+export type AdminSubscriptionRequestDetail = AdminSubscriptionRequest & {
+  amounts: {
+    baseAmountCents: number | null;
+    feeAmountCents: number | null;
+    totalAmountCents: number | null;
+    currency: string;
+    priceLabel: string;
+  };
+  renewal: {
+    enabled: boolean;
+    type: SubscriptionRenewalType | null;
+    status: SubscriptionRenewalStatus;
+    nextDate: string | null;
+  };
+  holder: AdminSubscriptionRequest["member"] & {
+    address: (Omit<ImagineRAddressPayload, "type"> & { id: string }) | null;
+    schoolName: string | null;
+    schoolZipOrCity: string | null;
+    schoolLevel: SchoolLevel | null;
+    scholarshipStatus: ImagineRScholarshipStatus | null;
+  };
+  payer: AdminSubscriptionRequest["payer"] & {
+    birthDate: string | null;
+    address: (Omit<ImagineRAddressPayload, "type"> & { id: string }) | null;
+  };
+  signatures: {
+    informationAccepted: boolean;
+    payerAccepted: boolean;
+    termsAccepted: boolean;
+    documentsAccepted: boolean;
+    signedAt: string | null;
+  };
 };
 
 export type AdminSupportCase = {

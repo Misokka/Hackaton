@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 type StoredFamilyUser = {
   firstName?: string;
@@ -193,6 +193,7 @@ export function AppNavbar({ userName }: AppNavbarProps) {
   const router = useRouter();
   const headerRef = useRef<HTMLDivElement>(null);
 
+  const [hasMounted, setHasMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [displayName, setDisplayName] = useState(userName);
@@ -202,9 +203,11 @@ export function AppNavbar({ userName }: AppNavbarProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const accessToken = localStorage.getItem("familyAccessToken");
-    setIsConnected(Boolean(accessToken));
-    setDisplayName(userName || getStoredUserName());
+    startTransition(() => {
+      setHasMounted(true);
+      setIsConnected(Boolean(localStorage.getItem("familyAccessToken")));
+      setDisplayName(userName || getStoredUserName());
+    });
   }, [userName]);
 
   useEffect(() => {
@@ -270,6 +273,15 @@ export function AppNavbar({ userName }: AppNavbarProps) {
       setIsSearchOpen(false);
       setSearchQuery("");
     }
+  }
+
+  if (!hasMounted) {
+    return (
+      <>
+        <div className="relative z-30 hidden min-h-9 border-b border-neutral-light bg-white lg:block" />
+        <div className="sticky top-0 z-50 min-h-16 bg-idfm-anthracite" />
+      </>
+    );
   }
 
   return (

@@ -38,6 +38,20 @@ export class SubscriptionRequestsService {
       { key: "READY", label: "Titre en préparation" },
     ];
 
+    if (status === "BLOCKED") {
+      return steps.map((step, index) => ({
+        ...step,
+        status: index < 2 ? "DONE" : index === 2 ? "CURRENT" : "UPCOMING",
+      }));
+    }
+
+    if (status === "REJECTED") {
+      return steps.map((step, index) => ({
+        ...step,
+        status: index < 3 ? "DONE" : "UPCOMING",
+      }));
+    }
+
     const activeIndex =
       status === "ACTIVE"
         ? 4
@@ -151,6 +165,8 @@ export class SubscriptionRequestsService {
       requestNumber: request.requestNumber,
       flowType: request.flowType,
       status: request.status,
+      reviewedAt: this.formatDate(request.reviewedAt),
+      rejectionReason: request.rejectionReason,
       autoRenewalEnabled: request.autoRenewalEnabled,
       renewal: this.formatRenewal(request),
       intelligentDossierEnabled: request.intelligentDossierEnabled,
@@ -196,6 +212,7 @@ export class SubscriptionRequestsService {
         simulatedFileName: document.simulatedFileName,
         simulatedMimeType: document.simulatedMimeType,
         simulatedSizeBytes: document.simulatedSizeBytes,
+        simulatedPreviewDataUrl: document.simulatedPreviewDataUrl,
         uploadedAt: this.formatDate(document.uploadedAt),
       })),
       imagineR:
@@ -547,6 +564,7 @@ export class SubscriptionRequestsService {
               simulatedFileName: document.simulatedFileName,
               simulatedMimeType: document.simulatedMimeType,
               simulatedSizeBytes: document.simulatedSizeBytes,
+              simulatedPreviewDataUrl: document.simulatedPreviewDataUrl,
               uploadedAt: new Date(),
             },
           });
@@ -560,6 +578,7 @@ export class SubscriptionRequestsService {
               simulatedFileName: document.simulatedFileName,
               simulatedMimeType: document.simulatedMimeType,
               simulatedSizeBytes: document.simulatedSizeBytes,
+              simulatedPreviewDataUrl: document.simulatedPreviewDataUrl,
               uploadedAt: new Date(),
             },
           });
