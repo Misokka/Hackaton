@@ -1,9 +1,9 @@
-import "dotenv/config";
-import argon2 from "argon2";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-import { Pool } from "pg";
-import { buildNavigoNumber } from "../src/navigo-passes/navigo-number.util";
+import 'dotenv/config';
+import argon2 from 'argon2';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { buildNavigoNumber } from '../src/navigo-passes/navigo-number.util';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -604,8 +604,15 @@ async function main() {
   await prisma.supportCase.deleteMany({
     where: {
       householdId: null,
-      type: "FOUND_PASS",
-      passNumberMasked: buildNavigoNumber("seed-found-pass"),
+      type: 'FOUND_PASS',
+      passNumberMasked: {
+        in: [
+          buildNavigoNumber('seed-found-pass'),
+          '0 660 111 999 Q',
+          '0 660 999 123 X',
+          '********1234',
+        ],
+      },
     },
   });
 
@@ -1799,129 +1806,6 @@ async function main() {
         createdAt: dateAt('2026-06-10', '12:00:00'),
       },
     ],
-  });
-
-  await prisma.memberProfileDetail.create({
-    data: {
-      householdMemberId: manager.id,
-      householdRole: "Gestionnaire du foyer",
-      overview: "Votre espace centralise les profils, les paiements et les prochaines actions du foyer.",
-      supportNote: "Vous etes le point d'entree principal pour le suivi des dossiers et des alertes.",
-      accessibilityNote: null,
-      documents: ["Pièce d'identité", "Moyen de paiement si souscription"],
-      actions: {
-        create: [
-          {
-            label: "Trouver une offre",
-            href: `/dashboard/family/titles/recommendation?memberId=${manager.id}`,
-            variant: "PRIMARY",
-            order: 1,
-          },
-          {
-            label: "Attestation employeur",
-            href: "/dashboard/family",
-            variant: "SECONDARY",
-            order: 2,
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.memberProfileDetail.create({
-    data: {
-      householdMemberId: child.id,
-      householdRole: "Porteur du titre",
-      overview: "Lucas n'a pas encore de titre rattaché. Vous pouvez choisir l'offre adaptée avant souscription.",
-      supportNote: "Payeur : Sophie Martin. Documents probables : photo récente et certificat scolaire.",
-      accessibilityNote: null,
-      documents: ["Photo recente", "Certificat scolaire", "Piece d'identite si demandee"],
-      actions: {
-        create: [
-          {
-            label: "Trouver une offre",
-            href: `/dashboard/family/titles/recommendation?memberId=${child.id}`,
-            variant: "PRIMARY",
-            order: 1,
-          },
-          {
-            label: "Voir les justificatifs",
-            href: `/dashboard/family/members/${child.id}#documents`,
-            variant: "SECONDARY",
-            order: 2,
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.memberProfileDetail.create({
-    data: {
-      householdMemberId: senior.id,
-      householdRole: "Profil senior accompagné",
-      overview: "Marie n'a pas encore de titre rattaché. Une vérification peut orienter vers Navigo Senior ou Améthyste.",
-      supportNote: "Gestionnaire : Sophie Martin. Les justificatifs dépendront de l'offre retenue.",
-      accessibilityNote: "Le parcours senior reste accompagné et peut être repris plus tard.",
-      documents: ["Pièce d'identité", "Justificatif de domicile", "Justificatif de situation si demandé"],
-      actions: {
-        create: [
-          {
-            label: "Vérifier l'offre adaptée",
-            href: `/dashboard/family/titles/recommendation?memberId=${senior.id}`,
-            variant: "PRIMARY",
-            order: 1,
-          },
-          {
-            label: "Voir le profil",
-            href: `/dashboard/family/members/${senior.id}`,
-            variant: "SECONDARY",
-            order: 2,
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.consent.createMany({
-    data: [
-      { userId: user.id, type: "SERVICE_ALERTS", accepted: true },
-      { userId: user.id, type: "MOBILITY_NEWS", accepted: false },
-      { userId: user.id, type: "PARTNER_OFFERS", accepted: false },
-    ],
-  });
-
-  await prisma.supportCase.create({
-    data: {
-      householdId: household.id,
-      memberId: child.id,
-      type: "LOST_PASS",
-      status: "PASS_DEACTIVATION_REQUESTED",
-      reason: "LOST",
-      chosenResolution: "REPLACEMENT_CARD",
-      passNumberMasked: buildNavigoNumber(child.id),
-      description: "Passe perdu déclaré depuis l'espace famille.",
-      createdAt: new Date("2026-06-16T11:00:00.000Z"),
-    },
-  });
-
-  await prisma.supportCase.create({
-    data: {
-      type: "FOUND_PASS",
-      status: "OPEN",
-      passNumberMasked: buildNavigoNumber("seed-found-pass"),
-      foundLocation: "Gare de Lyon - guichet services",
-      depositedAtDesk: true,
-      createdAt: new Date("2026-06-16T11:30:00.000Z"),
-    },
-  });
-
-  await prisma.householdActivity.create({
-    data: {
-      householdId: household.id,
-      memberId: child.id,
-      label: "Passe perdu déclaré pour Lucas.",
-      createdAt: new Date("2026-06-16T11:00:00.000Z"),
-    },
   });
 
   for (const admin of adminAccounts) {
