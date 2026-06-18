@@ -41,6 +41,11 @@ export class SubscriptionRequestsController {
     return this.subscriptionRequestsService.submitImagineRForUser(request.user.sub, id);
   }
 
+  @Patch(":id/renewal/cancel")
+  async cancelRenewal(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    return this.subscriptionRequestsService.cancelRenewalForUser(request.user.sub, id);
+  }
+
   @Get(":id")
   async getOne(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     return this.subscriptionRequestsService.getForUser(request.user.sub, id);

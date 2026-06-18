@@ -35,12 +35,9 @@ export function RegisterSuccessStep({ result }: RegisterSuccessStepProps) {
           />
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div>
         <Link href="/dashboard/family" className="contents">
-          <Button>{result.nextAction.label}</Button>
-        </Link>
-        <Link href="/dashboard/family" className="contents">
-          <Button variant="secondary">Accéder à mon espace famille</Button>
+          <Button>Voir mon espace famille</Button>
         </Link>
       </div>
     </div>

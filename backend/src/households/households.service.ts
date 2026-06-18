@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
+import { NavigoPassesService } from "src/navigo-passes/navigo-passes.service";
 import { AddHouseholdMemberDto } from "./dtos/add-household-member.dto";
 
 type DashboardStatus =
@@ -11,6 +12,19 @@ type DashboardStatus =
   | "BLOCKED"
   | "LOST"
   | "EXPIRED";
+
+type DashboardPendingRenewal = {
+  enabled: boolean;
+  type: "ANNUAL" | "MONTHLY" | null;
+  status: "ACTIVE" | "DISABLED" | "CANCELLED" | "EXPIRED";
+  months: number | null;
+  monthsRemaining: number | null;
+  nextDate: string | null;
+  activatedAt: string | null;
+  cancelledAt: string | null;
+  label: string;
+  canCancel: boolean;
+};
 
 type DashboardPendingRequest = {
   id: string;
@@ -27,6 +41,7 @@ type DashboardPendingRequest = {
   offerName: string;
   offerSlug: string;
   updatedAt: string;
+  renewal: DashboardPendingRenewal;
 };
 
 type DashboardMember = {
@@ -71,7 +86,10 @@ type DashboardActivity = {
 
 @Injectable()
 export class HouseholdsService {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly navigoPassesService: NavigoPassesService,
+  ) {}
 
   private async findHouseholdRecordForUser(userId: string) {
     const household = await this.prismaService.household.findFirst({
@@ -110,6 +128,14 @@ export class HouseholdsService {
               orderBy: { updatedAt: "desc" },
               include: {
                 offer: true,
+              },
+            },
+            navigoPass: {
+              include: {
+                supportSwitches: {
+                  orderBy: { createdAt: "desc" },
+                  take: 6,
+                },
               },
             },
           },
@@ -218,6 +244,14 @@ export class HouseholdsService {
         requestNumber: string | null;
         status: string;
         updatedAt: Date;
+        autoRenewalEnabled: boolean;
+        renewalType: "ANNUAL" | "MONTHLY" | null;
+        renewalStatus: "ACTIVE" | "DISABLED" | "CANCELLED" | "EXPIRED";
+        renewalMonths: number | null;
+        renewalMonthsRemaining: number | null;
+        renewalNextDate: Date | null;
+        renewalActivatedAt: Date | null;
+        renewalCancelledAt: Date | null;
         offer: {
           name: string;
           slug: string;
@@ -290,11 +324,54 @@ export class HouseholdsService {
     };
   }
 
+  private formatPendingRenewal(request: {
+    autoRenewalEnabled: boolean;
+    renewalType: "ANNUAL" | "MONTHLY" | null;
+    renewalStatus: "ACTIVE" | "DISABLED" | "CANCELLED" | "EXPIRED";
+    renewalMonths: number | null;
+    renewalMonthsRemaining: number | null;
+    renewalNextDate: Date | null;
+    renewalActivatedAt: Date | null;
+    renewalCancelledAt: Date | null;
+  }): DashboardPendingRenewal {
+    const enabled = Boolean(request.autoRenewalEnabled && request.renewalStatus === "ACTIVE");
+    const type = request.renewalType ?? null;
+    const status = request.renewalStatus ?? "DISABLED";
+    const monthsRemaining = request.renewalMonthsRemaining ?? null;
+
+    return {
+      enabled,
+      type,
+      status,
+      months: request.renewalMonths ?? null,
+      monthsRemaining,
+      nextDate: request.renewalNextDate?.toISOString() ?? null,
+      activatedAt: request.renewalActivatedAt?.toISOString() ?? null,
+      cancelledAt: request.renewalCancelledAt?.toISOString() ?? null,
+      label: enabled
+        ? type === "MONTHLY"
+          ? `Reconduction active${monthsRemaining ? ` : ${monthsRemaining} mois restants` : ""}`
+          : "Renouvellement automatique activé"
+        : status === "CANCELLED"
+          ? "Renouvellement désactivé"
+          : "Aucun renouvellement automatique activé",
+      canCancel: enabled,
+    };
+  }
+
   private formatPendingRequest(request: {
     id: string;
     requestNumber: string | null;
     status: string;
     updatedAt: Date;
+    autoRenewalEnabled: boolean;
+    renewalType: "ANNUAL" | "MONTHLY" | null;
+    renewalStatus: "ACTIVE" | "DISABLED" | "CANCELLED" | "EXPIRED";
+    renewalMonths: number | null;
+    renewalMonthsRemaining: number | null;
+    renewalNextDate: Date | null;
+    renewalActivatedAt: Date | null;
+    renewalCancelledAt: Date | null;
     offer: {
       name: string;
       slug: string;
@@ -307,6 +384,7 @@ export class HouseholdsService {
       offerName: request.offer.name,
       offerSlug: request.offer.slug,
       updatedAt: request.updatedAt.toISOString(),
+      renewal: this.formatPendingRenewal(request),
     };
   }
 
@@ -485,6 +563,7 @@ export class HouseholdsService {
     }
 
     const detail = this.buildMemberDetail(member, memberRecord.profileDetail);
+    const navigoPass = await this.navigoPassesService.ensurePassFromMemberRecord(memberRecord);
 
     return {
       household: {
@@ -497,6 +576,7 @@ export class HouseholdsService {
         lastName: household.owner.lastName,
       },
       member,
+      navigoPass,
       ...detail,
       alerts: notifications.filter((notification) => notification.memberId === member.id || notification.memberId === null),
     };

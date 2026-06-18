@@ -8,6 +8,7 @@ import { SupportCasesModule } from './support-cases/support-cases.module';
 import { TitlesModule } from './titles/titles.module';
 import { SubscriptionRequestsModule } from './subscription-requests/subscription-requests.module';
 import { AdminModule } from './admin/admin.module';
+import { NavigoPassesModule } from './navigo-passes/navigo-passes.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AdminModule } from './admin/admin.module';
     SupportCasesModule,
     TitlesModule,
     SubscriptionRequestsModule,
+    NavigoPassesModule,
     AdminModule,
   ],
   controllers: [AppController],

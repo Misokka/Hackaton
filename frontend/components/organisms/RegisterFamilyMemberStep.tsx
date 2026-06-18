@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Badge } from "../atoms/Badge";
 import { Button } from "../atoms/Button";
@@ -30,6 +31,10 @@ const emptyDraft: DraftMember = {
   schoolLevel: "COLLEGE",
   seniorRelationship: "PARENT",
 };
+
+const memberFieldClassName = "h-16";
+const memberSelectClassName =
+  "mt-2 h-16 w-full rounded-md border border-neutral-medium bg-white px-4 text-base font-semibold text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
 
 const profileCards: Array<{
   description: string;
@@ -98,6 +103,31 @@ function buildMemberId() {
   }
 
   return `member-${Date.now()}`;
+}
+
+function SelectField({
+  children,
+  label,
+  onChange,
+  value,
+}: {
+  children: ReactNode;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block w-full text-xs font-bold uppercase tracking-wide text-neutral-medium">
+      <span>{label}</span>
+      <select
+        className={memberSelectClassName}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {children}
+      </select>
+    </label>
+  );
 }
 
 export function RegisterFamilyMemberStep({ errors, members, onChange }: RegisterFamilyMemberStepProps) {
@@ -233,6 +263,7 @@ export function RegisterFamilyMemberStep({ errors, members, onChange }: Register
         <div className="mt-5 grid gap-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <Input
+              className={memberFieldClassName}
               error={draftErrors.firstName}
               label="Prénom"
               name="memberFirstName"
@@ -240,6 +271,7 @@ export function RegisterFamilyMemberStep({ errors, members, onChange }: Register
               value={draft.firstName}
             />
             <Input
+              className={memberFieldClassName}
               error={draftErrors.lastName}
               label="Nom"
               name="memberLastName"
@@ -250,6 +282,7 @@ export function RegisterFamilyMemberStep({ errors, members, onChange }: Register
 
           <div className="grid gap-5 sm:grid-cols-2">
             <Input
+              className={memberFieldClassName}
               error={draftErrors.birthDate}
               label="Date de naissance"
               name="memberBirthDate"
@@ -257,46 +290,37 @@ export function RegisterFamilyMemberStep({ errors, members, onChange }: Register
               type="date"
               value={draft.birthDate}
             />
-            <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-              Département de résidence
-              <select
-                className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                onChange={(event) => updateDraft("department", event.target.value)}
-                value={draft.department}
-              >
-                {Object.entries(departmentLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Département de résidence"
+              onChange={(value) => updateDraft("department", value)}
+              value={draft.department}
+            >
+              {Object.entries(departmentLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </SelectField>
           </div>
 
           {selectedType === "YOUNG" ? (
-            <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-              Niveau scolaire
-              <select
-                className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                onChange={(event) => updateDraft("schoolLevel", event.target.value)}
-                value={draft.schoolLevel}
-              >
-                {Object.entries(schoolLevelLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Niveau scolaire"
+              onChange={(value) => updateDraft("schoolLevel", value)}
+              value={draft.schoolLevel}
+            >
+              {Object.entries(schoolLevelLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </SelectField>
           ) : (
-            <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-              Lien avec le gestionnaire
-              <select
-                className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                onChange={(event) => updateDraft("seniorRelationship", event.target.value)}
-                value={draft.seniorRelationship}
-              >
-                {Object.entries(seniorRelationshipLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Lien avec le gestionnaire"
+              onChange={(value) => updateDraft("seniorRelationship", value)}
+              value={draft.seniorRelationship}
+            >
+              {Object.entries(seniorRelationshipLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </SelectField>
           )}
 
           {selectedType === "YOUNG" && draftAge !== null && draftAge < 16 ? (

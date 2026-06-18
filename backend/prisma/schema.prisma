@@ -111,6 +111,18 @@ enum SubscriptionRequestAddressType {
   PAYER
 }
 
+enum SubscriptionRenewalType {
+  ANNUAL
+  MONTHLY
+}
+
+enum SubscriptionRenewalStatus {
+  ACTIVE
+  DISABLED
+  CANCELLED
+  EXPIRED
+}
+
 enum SubscriptionDocumentStatus {
   MISSING
   READY
@@ -118,6 +130,17 @@ enum SubscriptionDocumentStatus {
   UNDER_REVIEW
   VALIDATED
   REJECTED
+}
+
+enum NavigoPassSupportType {
+  PHYSICAL
+  DIGITAL
+}
+
+enum NavigoPassStatus {
+  ACTIVE
+  IN_PROGRESS
+  DISABLED
 }
 
 enum ImagineRScholarshipStatus {
@@ -234,10 +257,40 @@ model HouseholdMember {
   activities            HouseholdActivity[]
   profileDetail         MemberProfileDetail?
   supportCases          SupportCase[]
+  navigoPass            NavigoPass?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   @@index([householdId])
+}
+
+model NavigoPass {
+  id                  String                @id @default(uuid())
+  householdMemberId   String                @unique
+  householdMember     HouseholdMember       @relation(fields: [householdMemberId], references: [id], onDelete: Cascade)
+  navigoNumber        String                @unique
+  productName         String
+  supportType         NavigoPassSupportType @default(PHYSICAL)
+  status              NavigoPassStatus      @default(IN_PROGRESS)
+  supportSwitches     NavigoPassSupportSwitch[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([householdMemberId])
+  @@index([supportType])
+  @@index([status])
+}
+
+model NavigoPassSupportSwitch {
+  id              String                @id @default(uuid())
+  navigoPassId    String
+  navigoPass      NavigoPass            @relation(fields: [navigoPassId], references: [id], onDelete: Cascade)
+  previousSupport NavigoPassSupportType
+  newSupport      NavigoPassSupportType
+  createdAt       DateTime              @default(now())
+
+  @@index([navigoPassId])
+  @@index([createdAt])
 }
 
 model ProductOffer {
@@ -305,6 +358,13 @@ model SubscriptionRequest {
   payerMember                HouseholdMember?          @relation("SubscriptionRequestPayer", fields: [payerMemberId], references: [id], onDelete: SetNull)
   status                     SubscriptionRequestStatus @default(WAITING_DOCUMENTS)
   autoRenewalEnabled         Boolean                   @default(false)
+  renewalType                SubscriptionRenewalType?
+  renewalStatus              SubscriptionRenewalStatus @default(DISABLED)
+  renewalMonths              Int?
+  renewalMonthsRemaining     Int?
+  renewalNextDate            DateTime?
+  renewalActivatedAt         DateTime?
+  renewalCancelledAt         DateTime?
   intelligentDossierEnabled  Boolean                   @default(false)
   hasPreviousImagineR         Boolean?
   hasCustomerNumber           Boolean?
@@ -342,6 +402,7 @@ model SubscriptionRequest {
   @@index([payerMemberId])
   @@index([flowType])
   @@index([status])
+  @@index([renewalStatus])
 }
 
 model SubscriptionRequestAddress {

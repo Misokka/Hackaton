@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
 
 const SUBSCRIPTION_REQUEST_STATUSES = [
   "DRAFT",
@@ -19,6 +19,12 @@ export class UpdateSubscriptionRequestDto {
   @IsOptional()
   @IsBoolean()
   autoRenewalEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  renewalMonths?: number;
 
   @IsOptional()
   @IsIn(SUBSCRIPTION_REQUEST_STATUSES)

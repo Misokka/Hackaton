@@ -136,6 +136,11 @@ export class UpdateImagineRRequestDto {
   autoRenewalEnabled?: boolean;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  renewalMonths?: number;
+
+  @IsOptional()
   @IsBoolean()
   intelligentDossierEnabled?: boolean;
 

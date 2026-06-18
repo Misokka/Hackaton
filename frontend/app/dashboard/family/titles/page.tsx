@@ -11,6 +11,7 @@ import { getTitleOffers } from "@/lib/api/titles";
 import type { HouseholdDashboardResponse, ProductOffer } from "@/lib/api/types";
 import { familyDashboardMock } from "@/lib/demo/familyDashboardMock";
 import { titleOffersMock } from "@/lib/demo/titleOffersMock";
+import { getSubscriptionRequestStatusLabel } from "@/lib/subscription-status";
 
 type TitlesPageState = {
   dashboard: HouseholdDashboardResponse;
@@ -39,28 +40,15 @@ function getMemberTitleStatus(member: HouseholdDashboardResponse["members"][numb
   return member.profileType === "MANAGER" ? "Aucun titre rattache" : "Offre a choisir";
 }
 
-function getRequestStatusLabel(status: NonNullable<HouseholdDashboardResponse["members"][number]["pendingRequest"]>["status"]) {
-  if (status === "DRAFT") {
-    return "Brouillon";
+function formatMonthYear(value: string | null) {
+  if (!value) {
+    return "A definir";
   }
 
-  if (status === "WAITING_DOCUMENTS") {
-    return "Justificatifs attendus";
-  }
-
-  if (status === "UNDER_REVIEW") {
-    return "En vérification";
-  }
-
-  if (status === "PAYMENT_PENDING") {
-    return "Paiement à confirmer";
-  }
-
-  if (status === "CONFIRMED") {
-    return "Confirmée";
-  }
-
-  return "En cours";
+  return new Intl.DateTimeFormat("fr-FR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function FamilyTitlesContent() {
@@ -156,11 +144,25 @@ function FamilyTitlesContent() {
                           </h3>
                           <p className="mt-1 text-sm text-neutral-medium">{request.offerName}</p>
                         </div>
-                        <Badge tone="orange">{getRequestStatusLabel(request.status)}</Badge>
+                        <Badge tone="orange">{getSubscriptionRequestStatusLabel(request.status)}</Badge>
                       </div>
                       <p className="mt-4 flex-1 text-sm leading-6 text-neutral-medium">
                         Dossier {request.requestNumber ?? "enregistré"} : les informations et justificatifs peuvent être suivis depuis votre espace.
                       </p>
+                      {request.renewal?.enabled ? (
+                        <div className="mt-4 rounded-xl bg-white/80 p-3 text-sm text-neutral-medium">
+                          <p className="font-semibold text-idfm-anthracite">{request.renewal.label}</p>
+                          <p className="mt-1">Prochaine échéance : {formatMonthYear(request.renewal.nextDate)}</p>
+                          {request.renewal.canCancel ? (
+                            <Link
+                              href={`/dashboard/family/subscriptions/${request.id}/confirmation#renewal`}
+                              className="mt-2 inline-flex font-semibold text-idfm-interaction underline-offset-4 hover:underline"
+                            >
+                              Gérer le renouvellement
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <Link
                         href={`/dashboard/family/subscriptions/${request.id}/confirmation`}
                         className="mt-5 inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
@@ -204,11 +206,16 @@ function FamilyTitlesContent() {
                   </div>
                   <p className="mt-4 flex-1 text-sm leading-6 text-neutral-medium">
                     {member.pendingRequest
-                      ? `${member.pendingRequest.offerName} — ${getRequestStatusLabel(member.pendingRequest.status)}.`
+                      ? `${member.pendingRequest.offerName} — ${getSubscriptionRequestStatusLabel(member.pendingRequest.status)}.`
                       : member.recommendedProduct
                         ? `Offre reperee : ${member.recommendedProduct}`
                         : "Aucun titre rattache pour le moment."}
                   </p>
+                  {member.pendingRequest?.renewal?.enabled ? (
+                    <p className="mt-3 rounded-xl bg-idfm-light px-3 py-2 text-sm font-semibold text-idfm-anthracite">
+                      {member.pendingRequest.renewal.label}
+                    </p>
+                  ) : null}
                   <Link
                     href={actionHref}
                     className="mt-5 inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../atoms/Badge";
 import { Button } from "../atoms/Button";
@@ -38,6 +39,10 @@ const emptyDraft: Draft = {
   seniorRelationship: "PARENT",
 };
 
+const memberFieldClassName = "h-16";
+const memberSelectClassName =
+  "mt-2 h-16 w-full rounded-md border border-neutral-medium bg-white px-4 text-base font-semibold text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
+
 function getAge(birthDate: string) {
   if (!birthDate) return null;
 
@@ -51,6 +56,31 @@ function getAge(birthDate: string) {
   }
 
   return Number.isFinite(age) ? age : null;
+}
+
+function SelectField({
+  children,
+  label,
+  onChange,
+  value,
+}: {
+  children: ReactNode;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block w-full text-xs font-bold uppercase tracking-wide text-neutral-medium">
+      <span>{label}</span>
+      <select
+        className={memberSelectClassName}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {children}
+      </select>
+    </label>
+  );
 }
 
 export function AddHouseholdMemberModal({
@@ -182,6 +212,7 @@ export function AddHouseholdMemberModal({
         <div className="mt-6 rounded-2xl border border-neutral-light bg-neutral-xlight p-5">
           <div className="grid gap-5 sm:grid-cols-2">
             <Input
+              className={memberFieldClassName}
               error={errors.firstName}
               label="Prénom"
               name="newMemberFirstName"
@@ -189,6 +220,7 @@ export function AddHouseholdMemberModal({
               value={draft.firstName}
             />
             <Input
+              className={memberFieldClassName}
               error={errors.lastName}
               label="Nom"
               name="newMemberLastName"
@@ -199,6 +231,7 @@ export function AddHouseholdMemberModal({
 
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <Input
+              className={memberFieldClassName}
               error={errors.birthDate}
               label="Date de naissance"
               name="newMemberBirthDate"
@@ -206,47 +239,38 @@ export function AddHouseholdMemberModal({
               type="date"
               value={draft.birthDate}
             />
-            <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-              Département de résidence
-              <select
-                className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                onChange={(event) => updateDraft("department", event.target.value)}
-                value={draft.department}
-              >
-                {Object.entries(departmentLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Département de résidence"
+              onChange={(value) => updateDraft("department", value)}
+              value={draft.department}
+            >
+              {Object.entries(departmentLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </SelectField>
           </div>
 
           <div className="mt-5">
             {selectedType === "YOUNG" ? (
-              <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-                Niveau scolaire
-                <select
-                  className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                  onChange={(event) => updateDraft("schoolLevel", event.target.value)}
-                  value={draft.schoolLevel}
-                >
-                  {Object.entries(schoolLevelLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Niveau scolaire"
+                onChange={(value) => updateDraft("schoolLevel", value)}
+                value={draft.schoolLevel}
+              >
+                {Object.entries(schoolLevelLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </SelectField>
             ) : (
-              <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
-                Lien avec le gestionnaire
-                <select
-                  className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
-                  onChange={(event) => updateDraft("seniorRelationship", event.target.value)}
-                  value={draft.seniorRelationship}
-                >
-                  {Object.entries(seniorRelationshipLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Lien avec le gestionnaire"
+                onChange={(value) => updateDraft("seniorRelationship", value)}
+                value={draft.seniorRelationship}
+              >
+                {Object.entries(seniorRelationshipLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </SelectField>
             )}
           </div>
 

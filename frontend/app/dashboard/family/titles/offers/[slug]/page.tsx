@@ -14,14 +14,37 @@ import type { ProductOffer, ProductOfferDetail } from "@/lib/api/types";
 import { titleOffersMock } from "@/lib/demo/titleOffersMock";
 import { getOfferVisual } from "@/lib/offer-visuals";
 
+function withMandatoryIdentityDocument(offer: ProductOfferDetail): ProductOfferDetail {
+  if (!["IMAGINE_R_JUNIOR", "IMAGINE_R_SCHOOL"].includes(offer.productType)) {
+    return offer;
+  }
+
+  if (offer.requiredDocuments.some((document) => document.documentType === "ID_DOCUMENT")) {
+    return offer;
+  }
+
+  return {
+    ...offer,
+    requiredDocuments: [
+      ...offer.requiredDocuments,
+      {
+        id: `${offer.id}-identity-document`,
+        documentType: "ID_DOCUMENT",
+        label: "Justificatif d'identité",
+        required: true,
+      },
+    ],
+  };
+}
+
 function buildMockDetail(slug: string): ProductOfferDetail {
   const offer = titleOffersMock.find((candidate) => candidate.slug === slug) ?? titleOffersMock[0];
-  return {
+  return withMandatoryIdentityDocument({
     ...offer,
     relatedOffers: titleOffersMock
       .filter((candidate) => candidate.id !== offer.id && candidate.targetProfile === offer.targetProfile)
       .slice(0, 3),
-  };
+  });
 }
 
 function OfferBenefits({ benefits }: { benefits: ProductOffer["benefits"] }) {
@@ -58,7 +81,7 @@ function OfferDetailContent() {
     void loadOffer();
   }, [slug]);
 
-  const currentOffer = useMemo(() => offer ?? buildMockDetail(slug), [offer, slug]);
+  const currentOffer = useMemo(() => withMandatoryIdentityDocument(offer ?? buildMockDetail(slug)), [offer, slug]);
 
   return (
     <DashboardLayout

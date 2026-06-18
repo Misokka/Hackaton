@@ -8,12 +8,14 @@ import { InfoBox } from "@/components/molecules/InfoBox";
 import { ProfileSummaryCard } from "@/components/molecules/ProfileSummaryCard";
 import { StatusBadge } from "@/components/molecules/StatusBadge";
 import { LostPassFlow } from "@/components/organisms/LostPassFlow";
+import { NavigoPassSection } from "@/components/organisms/NavigoPassSection";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
 import {
   createLostPassSupportCase,
   getHouseholdMemberDetail,
+  switchNavigoPassSupport,
 } from "@/lib/api/households";
-import type { LostPassPayload, LostPassResponse, MemberDetailResponse } from "@/lib/api/types";
+import type { LostPassPayload, LostPassResponse, MemberDetailResponse, NavigoPass, NavigoPassSupportType } from "@/lib/api/types";
 import { getProfileVisual } from "@/lib/member-visuals";
 
 export default function MemberDetailPage() {
@@ -89,6 +91,21 @@ export default function MemberDetailPage() {
     }
   }
 
+  async function handleSwitchSupport(targetSupport: NavigoPassSupportType): Promise<NavigoPass> {
+    const accessToken = localStorage.getItem("familyAccessToken");
+    if (!accessToken) {
+      throw new Error("Impossible de changer le support sans session active.");
+    }
+
+    const updatedPass = await switchNavigoPassSupport(accessToken, memberId, targetSupport);
+
+    startTransition(() => {
+      setDetail((current) => current ? { ...current, navigoPass: updatedPass } : current);
+    });
+
+    return updatedPass;
+  }
+
   if (!detail) {
     return (
       <DashboardLayout
@@ -144,6 +161,12 @@ export default function MemberDetailPage() {
             name={`${detail.member.firstName} ${detail.member.lastName}`}
             status={<StatusBadge status={detail.member.status} />}
             subtitle={detail.householdRole}
+          />
+
+          <NavigoPassSection
+            memberName={`${detail.member.firstName} ${detail.member.lastName}`}
+            pass={detail.navigoPass}
+            onSwitchSupport={handleSwitchSupport}
           />
 
           <section id="documents" className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
