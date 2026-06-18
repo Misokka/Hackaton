@@ -3,8 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "src/prisma/prisma.service";
 import Stripe from "stripe";
 import { CancelStripeSessionDto } from "./dtos/cancel-stripe-session.dto";
+import { ConfirmStripePaymentIntentDto } from "./dtos/confirm-stripe-payment-intent.dto";
 import { ConfirmStripeSessionDto } from "./dtos/confirm-stripe-session.dto";
 import { CreateStripeCheckoutSessionDto } from "./dtos/create-stripe-checkout-session.dto";
+import { CreateStripePaymentIntentDto } from "./dtos/create-stripe-payment-intent.dto";
 
 @Injectable()
 export class PaymentsService {
@@ -66,6 +68,95 @@ export class PaymentsService {
     }
   }
 
+  private async markRequestPaid(params: {
+    userId: string;
+    subscriptionRequestId: string;
+    stripeCheckoutSessionId?: string | null;
+    stripePaymentIntentId?: string | null;
+  }) {
+    const existing = await this.findRequestForUser(params.userId, params.subscriptionRequestId);
+
+    if (
+      params.stripeCheckoutSessionId
+      && existing.stripeCheckoutSessionId
+      && existing.stripeCheckoutSessionId !== params.stripeCheckoutSessionId
+    ) {
+      throw new BadRequestException("Cette session Stripe ne correspond pas à la demande.");
+    }
+
+    if (existing.paymentConfirmedAt || ["UNDER_REVIEW", "CONFIRMED", "ACTIVE"].includes(existing.status)) {
+      return {
+        id: existing.id,
+        status: existing.status,
+        paymentConfirmedAt: existing.paymentConfirmedAt?.toISOString() ?? null,
+        stripeCheckoutSessionId: existing.stripeCheckoutSessionId,
+        stripePaymentIntentId: existing.stripePaymentIntentId,
+      };
+    }
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      await tx.subscriptionDocument.updateMany({
+        where: {
+          subscriptionRequestId: params.subscriptionRequestId,
+          status: "UPLOADED",
+        },
+        data: {
+          status: "UNDER_REVIEW",
+        },
+      });
+
+      const request = await tx.subscriptionRequest.update({
+        where: { id: params.subscriptionRequestId },
+        data: {
+          status: "UNDER_REVIEW",
+          stripeCheckoutSessionId: params.stripeCheckoutSessionId ?? existing.stripeCheckoutSessionId,
+          stripePaymentIntentId: params.stripePaymentIntentId ?? existing.stripePaymentIntentId,
+          paymentConfirmedAt: new Date(),
+          paymentSimulatedAt: new Date(),
+          paymentCancelledAt: null,
+          submittedAt: new Date(),
+        },
+        include: {
+          household: { include: { owner: true } },
+          member: true,
+          payerMember: true,
+          offer: true,
+          documents: { orderBy: { createdAt: "asc" } },
+          addresses: true,
+        },
+      });
+
+      await tx.familyNotification.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          type: "RENEWAL",
+          severity: "SUCCESS",
+          title: `${existing.member.firstName} — paiement confirmé`,
+          message: `Le paiement ${existing.offer.name} est confirmé. Le dossier va être vérifié par nos équipes.`,
+        },
+      });
+
+      await tx.householdActivity.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          label: `Paiement Stripe confirmé pour la demande ${existing.offer.name}.`,
+        },
+      });
+
+      return request;
+    });
+
+    return {
+      id: updated.id,
+      status: updated.status,
+      paymentConfirmedAt: updated.paymentConfirmedAt?.toISOString() ?? null,
+      stripeCheckoutSessionId: updated.stripeCheckoutSessionId,
+      stripePaymentIntentId: updated.stripePaymentIntentId,
+    };
+  }
+
   async createCheckoutSession(userId: string, data: CreateStripeCheckoutSessionDto) {
     const request = await this.findRequestForUser(userId, data.subscriptionRequestId);
     this.assertPayable(request);
@@ -121,6 +212,61 @@ export class PaymentsService {
     };
   }
 
+  async createPaymentIntent(userId: string, data: CreateStripePaymentIntentDto) {
+    const request = await this.findRequestForUser(userId, data.subscriptionRequestId);
+    this.assertPayable(request);
+    const stripe = this.getStripe();
+    const totalAmountCents = request.totalAmountCents ?? 0;
+
+    if (request.stripePaymentIntentId) {
+      const existingIntent = await stripe.paymentIntents.retrieve(request.stripePaymentIntentId);
+
+      if (
+        existingIntent.status !== "succeeded"
+        && existingIntent.status !== "canceled"
+        && existingIntent.amount === totalAmountCents
+        && existingIntent.currency.toUpperCase() === request.currency.toUpperCase()
+        && existingIntent.client_secret
+      ) {
+        return {
+          paymentIntentId: existingIntent.id,
+          clientSecret: existingIntent.client_secret,
+          amountCents: existingIntent.amount,
+          currency: existingIntent.currency.toUpperCase(),
+        };
+      }
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: totalAmountCents,
+      currency: request.currency.toLowerCase(),
+      automatic_payment_methods: { enabled: true, allow_redirects: "never" },
+      description: `Demande ${request.requestNumber ?? request.id} - ${request.offer.name}`,
+      metadata: {
+        subscriptionRequestId: request.id,
+        userId,
+        householdId: request.householdId,
+        memberId: request.memberId,
+      },
+    });
+
+    await this.prismaService.subscriptionRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "PAYMENT_PENDING",
+        stripePaymentIntentId: paymentIntent.id,
+        paymentCancelledAt: null,
+      },
+    });
+
+    return {
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret,
+      amountCents: paymentIntent.amount,
+      currency: paymentIntent.currency.toUpperCase(),
+    };
+  }
+
   async confirmSession(userId: string, data: ConfirmStripeSessionDto) {
     const stripe = this.getStripe();
     const session = await stripe.checkout.sessions.retrieve(data.sessionId);
@@ -128,12 +274,6 @@ export class PaymentsService {
 
     if (!subscriptionRequestId) {
       throw new BadRequestException("Session Stripe invalide.");
-    }
-
-    const existing = await this.findRequestForUser(userId, subscriptionRequestId);
-
-    if (existing.stripeCheckoutSessionId && existing.stripeCheckoutSessionId !== session.id) {
-      throw new BadRequestException("Cette session Stripe ne correspond pas à la demande.");
     }
 
     if (session.payment_status !== "paid") {
@@ -145,66 +285,32 @@ export class PaymentsService {
         ? session.payment_intent
         : session.payment_intent?.id ?? null;
 
-    const updated = await this.prismaService.$transaction(async (tx) => {
-      await tx.subscriptionDocument.updateMany({
-        where: {
-          subscriptionRequestId,
-          status: "UPLOADED",
-        },
-        data: {
-          status: "UNDER_REVIEW",
-        },
-      });
-
-      const request = await tx.subscriptionRequest.update({
-        where: { id: subscriptionRequestId },
-        data: {
-          status: "UNDER_REVIEW",
-          stripeCheckoutSessionId: session.id,
-          stripePaymentIntentId: paymentIntentId,
-          paymentConfirmedAt: new Date(),
-          paymentSimulatedAt: new Date(),
-          paymentCancelledAt: null,
-          submittedAt: new Date(),
-        },
-        include: {
-          household: { include: { owner: true } },
-          member: true,
-          payerMember: true,
-          offer: true,
-          documents: { orderBy: { createdAt: "asc" } },
-          addresses: true,
-        },
-      });
-
-      await tx.familyNotification.create({
-        data: {
-          householdId: existing.householdId,
-          memberId: existing.memberId,
-          type: "RENEWAL",
-          severity: "SUCCESS",
-          title: `${existing.member.firstName} — paiement confirmé`,
-          message: `Le paiement ${existing.offer.name} est confirmé. Le dossier va être vérifié par nos équipes.`,
-        },
-      });
-
-      await tx.householdActivity.create({
-        data: {
-          householdId: existing.householdId,
-          memberId: existing.memberId,
-          label: `Paiement Stripe confirmé pour la demande ${existing.offer.name}.`,
-        },
-      });
-
-      return request;
+    return this.markRequestPaid({
+      userId,
+      subscriptionRequestId,
+      stripeCheckoutSessionId: session.id,
+      stripePaymentIntentId: paymentIntentId,
     });
+  }
 
-    return {
-      id: updated.id,
-      status: updated.status,
-      paymentConfirmedAt: updated.paymentConfirmedAt?.toISOString() ?? null,
-      stripeCheckoutSessionId: updated.stripeCheckoutSessionId,
-    };
+  async confirmPaymentIntent(userId: string, data: ConfirmStripePaymentIntentDto) {
+    const stripe = this.getStripe();
+    const paymentIntent = await stripe.paymentIntents.retrieve(data.paymentIntentId);
+    const subscriptionRequestId = paymentIntent.metadata?.subscriptionRequestId;
+
+    if (!subscriptionRequestId) {
+      throw new BadRequestException("Paiement Stripe invalide.");
+    }
+
+    if (paymentIntent.status !== "succeeded") {
+      throw new BadRequestException("Le paiement Stripe n'est pas confirmé.");
+    }
+
+    return this.markRequestPaid({
+      userId,
+      subscriptionRequestId,
+      stripePaymentIntentId: paymentIntent.id,
+    });
   }
 
   async cancelSession(userId: string, data: CancelStripeSessionDto) {

@@ -33,8 +33,26 @@ export function createStripeCheckoutSession(accessToken: string, subscriptionReq
   });
 }
 
+export function createStripePaymentIntent(accessToken: string, subscriptionRequestId: string) {
+  return paymentFetch<{
+    paymentIntentId: string;
+    clientSecret: string | null;
+    amountCents: number;
+    currency: string;
+  }>(accessToken, "/api/payments/stripe/payment-intent", {
+    method: "POST",
+    body: JSON.stringify({ subscriptionRequestId }),
+  });
+}
+
 export function confirmStripeCheckoutSession(accessToken: string, sessionId: string) {
-  return paymentFetch<{ id: string; status: string; paymentConfirmedAt: string | null; stripeCheckoutSessionId: string | null }>(
+  return paymentFetch<{
+    id: string;
+    status: string;
+    paymentConfirmedAt: string | null;
+    stripeCheckoutSessionId: string | null;
+    stripePaymentIntentId: string | null;
+  }>(
     accessToken,
     "/api/payments/stripe/confirm-session",
     {
@@ -42,6 +60,19 @@ export function confirmStripeCheckoutSession(accessToken: string, sessionId: str
       body: JSON.stringify({ sessionId }),
     },
   );
+}
+
+export function confirmStripePaymentIntent(accessToken: string, paymentIntentId: string) {
+  return paymentFetch<{
+    id: string;
+    status: string;
+    paymentConfirmedAt: string | null;
+    stripeCheckoutSessionId: string | null;
+    stripePaymentIntentId: string | null;
+  }>(accessToken, "/api/payments/stripe/confirm-payment-intent", {
+    method: "POST",
+    body: JSON.stringify({ paymentIntentId }),
+  });
 }
 
 export function cancelStripeCheckoutSession(
