@@ -526,6 +526,7 @@ export type SubscriptionRequestResponse = {
     simulatedMimeType?: string | null;
     simulatedSizeBytes?: number | null;
     simulatedPreviewDataUrl?: string | null;
+    hasStoredFile?: boolean;
     uploadedAt?: string | null;
   }>;
   imagineR: {
@@ -663,8 +664,15 @@ export type AdminSubscriptionRequest = {
     simulatedMimeType?: string | null;
     simulatedSizeBytes?: number | null;
     simulatedPreviewDataUrl?: string | null;
+    hasStoredFile?: boolean;
     uploadedAt?: string | null;
   }>;
+};
+
+export type AdminSubscriptionDocumentPreview = {
+  fileName: string | null;
+  mimeType: string;
+  dataUrl: string;
 };
 
 export type AdminSubscriptionRequestFilter =

@@ -15,7 +15,9 @@ import {
   rejectAdminSubscriptionRequest,
   updateAdminSubscriptionDocument,
 } from "@/lib/api/admin";
+import { buildApiUrl } from "@/lib/api";
 import type {
+  AdminSubscriptionDocumentPreview,
   AdminSubscriptionRequest,
   AdminSubscriptionRequestDetail,
   AdminSubscriptionRequestFilter,
@@ -110,6 +112,28 @@ function badgeTone(status: SubscriptionRequestStatus | SubscriptionDocumentStatu
   return "blue";
 }
 
+async function fetchDocumentPreview(accessToken: string, requestId: string, documentId: string) {
+  const response = await fetch(
+    buildApiUrl(`/api/admin/subscription-requests/${requestId}/documents/${documentId}/preview`),
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    const message = Array.isArray(data?.message)
+      ? data.message.join(" ")
+      : data?.message ?? "Aperçu indisponible.";
+
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<AdminSubscriptionDocumentPreview>;
+}
+
 function KpiCard({ label, value, helper, tone = "blue" }: {
   label: string;
   value: string | number;
@@ -176,9 +200,13 @@ function RequestModal({
   const [documentReason, setDocumentReason] = useState("");
   const [requestRejectReason, setRequestRejectReason] = useState("");
   const [previewDocument, setPreviewDocument] = useState<AdminSubscriptionRequestDetail["documents"][number] | null>(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   if (!detail) return null;
 
+  const requestId = detail.id;
   const canApprove = detail.documents.length > 0 && detail.documents.every((document) => document.status === "VALIDATED");
 
   function handleDocumentReject(event: FormEvent<HTMLFormElement>) {
@@ -196,7 +224,23 @@ function RequestModal({
     setRequestRejectReason("");
   }
 
-  const previewIsImage = previewDocument?.simulatedPreviewDataUrl?.startsWith("data:image/");
+  const previewIsImage = previewDataUrl?.startsWith("data:image/");
+
+  async function openDocumentPreview(document: AdminSubscriptionRequestDetail["documents"][number]) {
+    setPreviewDocument(document);
+    setPreviewDataUrl(null);
+    setPreviewError(null);
+    setIsPreviewLoading(true);
+
+    try {
+      const preview = await fetchDocumentPreview(getAccessToken() ?? "", requestId, document.id);
+      setPreviewDataUrl(preview.dataUrl);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Aperçu indisponible.");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-idfm-anthracite/50 px-4 py-8" role="dialog" aria-modal="true">
@@ -290,17 +334,21 @@ function RequestModal({
                         Type : {document.documentType} - Ajout : {formatDateTime(document.uploadedAt ?? null)}
                       </p>
                       <div className="mt-3 rounded-md border border-dashed border-neutral-light bg-neutral-xlight p-3 text-sm">
-                        <p className="font-semibold text-idfm-anthracite">{document.simulatedFileName ?? "Fichier simulé non disponible"}</p>
-                        <p className="mt-1 text-neutral-medium">
-                          {document.simulatedMimeType ?? "Aperçu placeholder"}{document.simulatedSizeBytes ? ` - ${Math.round(document.simulatedSizeBytes / 1024)} Ko` : ""}
-                        </p>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-idfm-anthracite">{document.simulatedFileName ?? "Fichier simulé non disponible"}</p>
+                            <p className="mt-1 text-neutral-medium">
+                              {document.simulatedMimeType ?? "Aperçu placeholder"}{document.simulatedSizeBytes ? ` - ${Math.round(document.simulatedSizeBytes / 1024)} Ko` : ""}
+                            </p>
+                          </div>
+                          <Button type="button" variant="secondary" disabled={isBusy} onClick={() => void openDocumentPreview(document)}>
+                            Voir l&apos;image
+                          </Button>
+                        </div>
                       </div>
                       {document.rejectionReason ? <p className="mt-2 text-sm font-semibold text-status-danger">Motif : {document.rejectionReason}</p> : null}
                     </div>
                     <div className="flex flex-col gap-2">
-                      <Button type="button" variant="secondary" disabled={isBusy} onClick={() => setPreviewDocument(document)}>
-                        Voir l&apos;image
-                      </Button>
                       <Button type="button" disabled={isBusy || document.status === "VALIDATED"} onClick={() => onDocumentStatus(document.id, "VALIDATED")}>
                         Valider
                       </Button>
@@ -381,11 +429,13 @@ function RequestModal({
             </header>
 
             <div className="p-4">
-              {previewIsImage && previewDocument.simulatedPreviewDataUrl ? (
+              {isPreviewLoading ? (
+                <InfoBox>Chargement de l&apos;image...</InfoBox>
+              ) : previewIsImage && previewDataUrl ? (
                 <div className="flex justify-center rounded-md border border-neutral-light bg-neutral-xlight p-4">
                   {/* eslint-disable-next-line @next/next/no-img-element -- Data URL previews cannot be optimized by next/image. */}
                   <img
-                    src={previewDocument.simulatedPreviewDataUrl}
+                    src={previewDataUrl}
                     alt={`Aperçu du justificatif ${previewDocument.label}`}
                     className="max-h-[68vh] w-auto max-w-full rounded-md object-contain shadow-sm"
                   />
@@ -394,7 +444,7 @@ function RequestModal({
                 <div className="rounded-md border border-dashed border-neutral-light bg-neutral-xlight p-8 text-center">
                   <p className="text-lg font-bold text-idfm-anthracite">Aperçu image indisponible</p>
                   <p className="mt-2 text-sm leading-6 text-neutral-medium">
-                    Ce dossier ne contient pas d&apos;image prévisualisable. Le back-office dispose seulement des métadonnées du fichier simulé.
+                    {previewError ?? "Ce dossier ne contient pas d'image prévisualisable. Le back-office dispose seulement des métadonnées du fichier simulé."}
                   </p>
                   <dl className="mx-auto mt-5 grid max-w-lg gap-3 text-left text-sm">
                     <DetailLine label="Nom du fichier" value={previewDocument.simulatedFileName} />

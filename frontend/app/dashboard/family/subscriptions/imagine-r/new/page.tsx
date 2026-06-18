@@ -83,8 +83,8 @@ type FormState = {
   schoolName: string;
   schoolLevel: SchoolLevel;
   scholarshipStatus: ImagineRScholarshipStatus;
-  photoFile: { name: string; type: string; size: number; previewDataUrl: string | null } | null;
-  identityFile: { name: string; type: string; size: number; previewDataUrl: string | null } | null;
+  photoFile: { name: string; type: string; size: number; previewDataUrl: string | null; sourceFile?: File } | null;
+  identityFile: { name: string; type: string; size: number; previewDataUrl: string | null; sourceFile?: File } | null;
   autoRenewalEnabled: boolean;
   signatureInformationAccepted: boolean;
   signaturePayerAccepted: boolean;
@@ -146,6 +146,22 @@ function storePayerInfo(payerBirthDate: string, payerAddress: ImagineRAddressPay
       payerAddress,
     }),
   );
+}
+
+function readPreviewDataUrl(file: File) {
+  return new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function ensurePreviewDataUrl(file: FormState["photoFile"]) {
+  if (!file) return null;
+  if (file.previewDataUrl) return file.previewDataUrl;
+  if (!file.sourceFile) return null;
+  return readPreviewDataUrl(file.sourceFile);
 }
 
 function SectionCard({ children, title }: { children: ReactNode; title: string }) {
@@ -220,15 +236,6 @@ function UploadBox({
   label: string;
   onFile: (file: FormState["photoFile"]) => void;
 }) {
-  function readPreviewDataUrl(file: File) {
-    return new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  }
-
   return (
     <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-idfm-interaction bg-white p-5 text-center transition hover:bg-idfm-light focus-within:ring-3 focus-within:ring-idfm-medium">
       <span className="text-lg font-bold text-idfm-interaction">{file ? file.name : label}</span>
@@ -249,6 +256,7 @@ function UploadBox({
               type: selectedFile.type,
               size: selectedFile.size,
               previewDataUrl,
+              sourceFile: selectedFile,
             });
           });
         }}
@@ -451,6 +459,10 @@ function ImagineRSubscriptionContent() {
       if (step === 6) {
         if (!form.schoolZipOrCity || !form.schoolName) throw new Error("Renseignez l'établissement scolaire.");
         if (!form.photoFile || !form.identityFile) throw new Error("Ajoutez la photo et le justificatif d'identité pour continuer.");
+        const [photoPreviewDataUrl, identityPreviewDataUrl] = await Promise.all([
+          ensurePreviewDataUrl(form.photoFile),
+          ensurePreviewDataUrl(form.identityFile),
+        ]);
         await save({
           schoolZipOrCity: form.schoolZipOrCity,
           schoolName: form.schoolName,
@@ -465,7 +477,7 @@ function ImagineRSubscriptionContent() {
                   simulatedFileName: form.photoFile.name,
                   simulatedMimeType: form.photoFile.type,
                   simulatedSizeBytes: form.photoFile.size,
-                  simulatedPreviewDataUrl: form.photoFile.previewDataUrl ?? undefined,
+                  simulatedPreviewDataUrl: photoPreviewDataUrl ?? undefined,
                 }]
               : []),
             ...(form.identityFile
@@ -475,7 +487,7 @@ function ImagineRSubscriptionContent() {
                   simulatedFileName: form.identityFile.name,
                   simulatedMimeType: form.identityFile.type,
                   simulatedSizeBytes: form.identityFile.size,
-                  simulatedPreviewDataUrl: form.identityFile.previewDataUrl ?? undefined,
+                  simulatedPreviewDataUrl: identityPreviewDataUrl ?? undefined,
                 }]
               : []),
           ],

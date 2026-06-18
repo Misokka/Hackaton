@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateAdminFoundPassDto } from "./dtos/create-admin-found-pass.dto";
 import { FinalChoiceAdminSosCaseDto } from "./dtos/final-choice-admin-sos-case.dto";
@@ -28,6 +30,8 @@ const PICKUP_DELAY_DAYS = 14;
 @Injectable()
 export class AdminService {
   constructor(private readonly prismaService: PrismaService) {}
+
+  private documentUploadDirectory = join(process.cwd(), "uploads", "subscription-documents");
 
   private customerNumber(id: string) {
     return `CF-${id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -327,7 +331,7 @@ export class AdminService {
         simulatedFileName: document.simulatedFileName,
         simulatedMimeType: document.simulatedMimeType,
         simulatedSizeBytes: document.simulatedSizeBytes,
-        simulatedPreviewDataUrl: document.simulatedPreviewDataUrl,
+        hasStoredFile: Boolean(document.storedFilePath),
         uploadedAt: document.uploadedAt?.toISOString?.() ?? null,
       })),
     };
@@ -1154,6 +1158,46 @@ export class AdminService {
     });
 
     return this.formatSubscriptionRequestDetail(updated);
+  }
+
+  async getSubscriptionRequestDocumentPreview(id: string, documentId: string) {
+    const request = await this.prismaService.subscriptionRequest.findUnique({
+      where: { id },
+      include: {
+        documents: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const document = request.documents.find((candidate) => candidate.id === documentId);
+
+    if (!document) {
+      throw new NotFoundException("Justificatif introuvable.");
+    }
+
+    if (document.storedFilePath) {
+      const file = await readFile(join(this.documentUploadDirectory, document.storedFilePath));
+      const mimeType = document.simulatedMimeType ?? "application/octet-stream";
+
+      return {
+        fileName: document.simulatedFileName,
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${file.toString("base64")}`,
+      };
+    }
+
+    if (document.simulatedPreviewDataUrl) {
+      return {
+        fileName: document.simulatedFileName,
+        mimeType: document.simulatedMimeType ?? "application/octet-stream",
+        dataUrl: document.simulatedPreviewDataUrl,
+      };
+    }
+
+    throw new NotFoundException("Aucune image stockée pour ce justificatif.");
   }
 
   async approveSubscriptionRequest(id: string) {

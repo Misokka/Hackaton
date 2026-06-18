@@ -8,6 +8,7 @@ import type {
   AdminSosDashboardResponse,
   AdminSosFilter,
   AdminSubscriptionRequestDetail,
+  AdminSubscriptionDocumentPreview,
   AdminSubscriptionRequestFilter,
   AdminSubscriptionRequest,
   AdminSupportCase,
@@ -78,6 +79,13 @@ export function getAdminSubscriptionRequests(
 
 export function getAdminSubscriptionRequest(accessToken: string, id: string) {
   return adminFetch<AdminSubscriptionRequestDetail>(accessToken, `/api/admin/subscription-requests/${id}`);
+}
+
+export function getAdminSubscriptionDocumentPreview(accessToken: string, id: string, documentId: string) {
+  return adminFetch<AdminSubscriptionDocumentPreview>(
+    accessToken,
+    `/api/admin/subscription-requests/${id}/documents/${documentId}/preview`,
+  );
 }
 
 export function updateAdminSubscriptionRequest(

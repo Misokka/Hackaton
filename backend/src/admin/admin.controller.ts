@@ -58,6 +58,14 @@ export class AdminController {
     return this.adminService.getSubscriptionRequest(id);
   }
 
+  @Get("subscription-requests/:id/documents/:documentId/preview")
+  async getSubscriptionRequestDocumentPreview(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+  ) {
+    return this.adminService.getSubscriptionRequestDocumentPreview(id, documentId);
+  }
+
   @Patch("subscription-requests/:id")
   async updateSubscriptionRequest(
     @Param("id") id: string,

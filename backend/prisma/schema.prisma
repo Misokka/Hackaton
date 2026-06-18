@@ -439,6 +439,7 @@ model SubscriptionDocument {
   simulatedMimeType      String?
   simulatedSizeBytes     Int?
   simulatedPreviewDataUrl String?
+  storedFilePath         String?
   uploadedAt             DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
