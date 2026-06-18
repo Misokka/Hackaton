@@ -84,6 +84,30 @@ type DashboardActivity = {
   createdAt: string;
 };
 
+type ProcedureType =
+  | "SUBSCRIPTION"
+  | "RENEWAL"
+  | "SOS_NAVIGO"
+  | "FOUND_PASS"
+  | "SUPPORT_SWITCH"
+  | "DOCUMENT"
+  | "PAYMENT";
+
+type HouseholdProcedure = {
+  id: string;
+  profileName: string;
+  profileId: string | null;
+  type: ProcedureType;
+  title: string;
+  relatedTitle: string | null;
+  status: string;
+  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
+  nextAction: string;
+  detailUrl: string;
+};
+
 @Injectable()
 export class HouseholdsService {
   constructor(
@@ -203,6 +227,59 @@ export class HouseholdsService {
       status: "NO_SUBSCRIPTION" as const,
       nextAction: "Voir le profil",
     };
+  }
+
+  private getProcedureStatusLabel(status: string) {
+    const labels: Record<string, string> = {
+      DRAFT: "Brouillon",
+      WAITING_DOCUMENTS: "À compléter",
+      UNDER_REVIEW: "En vérification",
+      PAYMENT_PENDING: "En attente",
+      CONFIRMED: "Validée",
+      ACTIVE: "Terminée",
+      BLOCKED: "À compléter",
+      REJECTED: "Refusée",
+      CANCELLED: "Annulée",
+      MISSING: "À compléter",
+      READY: "En attente",
+      UPLOADED: "En vérification",
+      VALIDATED: "Validée",
+      OPEN: "En attente",
+      IN_PROGRESS: "En vérification",
+      TRANSFER_TO_PHONE_REQUESTED: "En vérification",
+      PASS_DEACTIVATION_REQUESTED: "En vérification",
+      PASS_FOUND_WAITING_PICKUP: "À compléter",
+      PASS_PICKED_UP: "À compléter",
+      DIGITAL_SUPPORT_CONFIRMED: "Terminée",
+      PHYSICAL_PASS_REACTIVATION_REQUESTED: "En vérification",
+      PHYSICAL_PASS_REACTIVATED: "Terminée",
+      RESOLVED: "Terminée",
+      CANCELLED_BY_USER: "Annulée",
+      SUPPORT_SWITCH: "Terminée",
+      RENEWAL_ACTIVE: "En attente",
+    };
+
+    return labels[status] ?? "En attente";
+  }
+
+  private getSubscriptionNextAction(status: string) {
+    if (status === "DRAFT") return "Reprendre la démarche";
+    if (status === "WAITING_DOCUMENTS") return "Ajouter les justificatifs attendus";
+    if (status === "UNDER_REVIEW") return "Attendre la validation des justificatifs";
+    if (status === "PAYMENT_PENDING") return "Confirmer le paiement";
+    if (status === "REJECTED" || status === "BLOCKED") return "Corriger le dossier";
+    if (status === "CONFIRMED" || status === "ACTIVE") return "Consulter le suivi";
+    return "Voir le suivi";
+  }
+
+  private getSupportCaseNextAction(status: string) {
+    if (status === "PASS_FOUND_WAITING_PICKUP") return "Récupérer le pass au guichet";
+    if (status === "PASS_PICKED_UP") return "Choisir le support final";
+    if (status === "OPEN" || status === "IN_PROGRESS") return "Suivre l'avancement";
+    if (status === "TRANSFER_TO_PHONE_REQUESTED") return "Suivre le transfert sur téléphone";
+    if (status === "PASS_DEACTIVATION_REQUESTED") return "Suivre la désactivation";
+    if (status === "RESOLVED") return "Consulter le dossier terminé";
+    return "Voir le détail";
   }
 
   private buildMemberView(
@@ -547,6 +624,167 @@ export class HouseholdsService {
       members,
       notifications,
       recentActivity,
+    };
+  }
+
+  async getProceduresForUser(userId: string) {
+    const household = await this.findHouseholdRecordForUser(userId);
+    const procedures: HouseholdProcedure[] = [];
+    const memberNameById = new Map(
+      household.members.map((member) => [member.id, `${member.firstName} ${member.lastName}`.trim()]),
+    );
+
+    const subscriptionRequests = await this.prismaService.subscriptionRequest.findMany({
+      where: { householdId: household.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        documents: true,
+        member: true,
+        offer: true,
+      },
+    });
+
+    for (const request of subscriptionRequests) {
+      const profileName = `${request.member.firstName} ${request.member.lastName}`.trim();
+      const detailUrl = request.status === "DRAFT" && request.flowType === "IMAGINE_R"
+        ? `/dashboard/family/subscriptions/imagine-r/new?requestId=${request.id}`
+        : `/dashboard/family/subscriptions/${request.id}/confirmation`;
+
+      procedures.push({
+        id: `subscription-${request.id}`,
+        profileId: request.memberId,
+        profileName,
+        type: "SUBSCRIPTION",
+        title: `Souscription ${request.offer.name}`,
+        relatedTitle: request.offer.name,
+        status: request.status,
+        statusLabel: this.getProcedureStatusLabel(request.status),
+        createdAt: request.createdAt.toISOString(),
+        updatedAt: request.updatedAt.toISOString(),
+        nextAction: this.getSubscriptionNextAction(request.status),
+        detailUrl,
+      });
+
+      if (request.autoRenewalEnabled || request.renewalStatus === "ACTIVE") {
+        const renewalStatus = request.renewalStatus === "ACTIVE" ? "RENEWAL_ACTIVE" : request.renewalStatus;
+
+        procedures.push({
+          id: `renewal-${request.id}`,
+          profileId: request.memberId,
+          profileName,
+          type: "RENEWAL",
+          title: `Renouvellement ${request.offer.name}`,
+          relatedTitle: request.offer.name,
+          status: renewalStatus,
+          statusLabel: this.getProcedureStatusLabel(renewalStatus),
+          createdAt: (request.renewalActivatedAt ?? request.createdAt).toISOString(),
+          updatedAt: request.updatedAt.toISOString(),
+          nextAction: request.renewalNextDate
+            ? `Prochaine échéance le ${new Intl.DateTimeFormat("fr-FR").format(request.renewalNextDate)}`
+            : "Suivre le renouvellement",
+          detailUrl: `/dashboard/family/subscriptions/${request.id}/confirmation`,
+        });
+      }
+
+      for (const document of request.documents) {
+        if (!["MISSING", "UNDER_REVIEW", "VALIDATED", "REJECTED"].includes(document.status)) continue;
+
+        procedures.push({
+          id: `document-${document.id}`,
+          profileId: request.memberId,
+          profileName,
+          type: "DOCUMENT",
+          title: `Justificatif — ${document.label}`,
+          relatedTitle: request.offer.name,
+          status: document.status,
+          statusLabel: this.getProcedureStatusLabel(document.status),
+          createdAt: document.createdAt.toISOString(),
+          updatedAt: document.updatedAt.toISOString(),
+          nextAction: document.status === "REJECTED"
+            ? "Remplacer le justificatif refusé"
+            : document.status === "MISSING"
+              ? "Ajouter le justificatif"
+              : document.status === "VALIDATED"
+                ? "Justificatif validé"
+                : "Attendre la vérification",
+          detailUrl: `/dashboard/family/subscriptions/${request.id}/confirmation`,
+        });
+      }
+
+      if (request.status === "PAYMENT_PENDING" || request.paymentSimulatedAt) {
+        const paymentStatus = request.status === "PAYMENT_PENDING" ? "PAYMENT_PENDING" : "CONFIRMED";
+
+        procedures.push({
+          id: `payment-${request.id}`,
+          profileId: request.memberId,
+          profileName,
+          type: "PAYMENT",
+          title: `Paiement ${request.offer.name}`,
+          relatedTitle: request.offer.name,
+          status: paymentStatus,
+          statusLabel: this.getProcedureStatusLabel(paymentStatus),
+          createdAt: (request.paymentSimulatedAt ?? request.createdAt).toISOString(),
+          updatedAt: request.updatedAt.toISOString(),
+          nextAction: request.status === "PAYMENT_PENDING" ? "Confirmer le paiement" : "Paiement pris en compte",
+          detailUrl: `/dashboard/family/subscriptions/${request.id}/confirmation`,
+        });
+      }
+    }
+
+    const supportCases = await this.prismaService.supportCase.findMany({
+      where: { householdId: household.id },
+      orderBy: { updatedAt: "desc" },
+      include: { member: true },
+    });
+
+    for (const supportCase of supportCases) {
+      const profileName = supportCase.member
+        ? `${supportCase.member.firstName} ${supportCase.member.lastName}`.trim()
+        : "Foyer";
+      const isFoundPass = supportCase.type === "FOUND_PASS";
+
+      procedures.push({
+        id: `support-${supportCase.id}`,
+        profileId: supportCase.memberId,
+        profileName,
+        type: isFoundPass ? "FOUND_PASS" : "SOS_NAVIGO",
+        title: isFoundPass ? "SOS Navigo — Pass retrouvé" : "SOS Navigo — Pass déclaré perdu",
+        relatedTitle: supportCase.passNumberMasked,
+        status: supportCase.status,
+        statusLabel: this.getProcedureStatusLabel(supportCase.status),
+        createdAt: supportCase.createdAt.toISOString(),
+        updatedAt: supportCase.updatedAt.toISOString(),
+        nextAction: this.getSupportCaseNextAction(supportCase.status),
+        detailUrl: `/dashboard/family/support-cases/${supportCase.id}`,
+      });
+    }
+
+    for (const member of household.members) {
+      const pass = member.navigoPass;
+      if (!pass) continue;
+
+      for (const supportSwitch of pass.supportSwitches) {
+        procedures.push({
+          id: `support-switch-${supportSwitch.id}`,
+          profileId: member.id,
+          profileName: memberNameById.get(member.id) ?? `${member.firstName} ${member.lastName}`.trim(),
+          type: "SUPPORT_SWITCH",
+          title: `Changement de support ${supportSwitch.previousSupport === "PHYSICAL" ? "physique" : "numérique"} → ${supportSwitch.newSupport === "PHYSICAL" ? "physique" : "numérique"}`,
+          relatedTitle: pass.productName,
+          status: "SUPPORT_SWITCH",
+          statusLabel: this.getProcedureStatusLabel("SUPPORT_SWITCH"),
+          createdAt: supportSwitch.createdAt.toISOString(),
+          updatedAt: supportSwitch.createdAt.toISOString(),
+          nextAction: "Changement de support enregistré",
+          detailUrl: `/dashboard/family/members/${member.id}`,
+        });
+      }
+    }
+
+    return {
+      procedures: procedures.sort((first, second) => (
+        new Date(second.updatedAt).getTime() - new Date(first.updatedAt).getTime()
+      )),
     };
   }
 
