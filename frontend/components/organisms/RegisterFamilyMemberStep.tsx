@@ -34,45 +34,52 @@ const emptyDraft: DraftMember = {
 
 const memberFieldClassName = "h-16";
 const memberSelectClassName =
-  "mt-2 h-16 w-full rounded-md border border-neutral-medium bg-white px-4 text-base font-semibold text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
+  "mt-2 h-16 w-full appearance-none rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
 
 const profileCards: Array<{
+  ageHint?: string;
   description: string;
   enabled: boolean;
   id: RegisterMemberType | "SPOUSE" | "STUDENT" | "CAREGIVER" | "DISCOUNT";
   title: string;
 }> = [
   {
+    ageHint: "Junior : 4 a 11 ans",
     id: "YOUNG",
     title: "Enfant / jeune",
     description: "Pour gérer un forfait Imagine R, Navigo Junior ou un renouvellement scolaire.",
     enabled: true,
   },
   {
+    ageHint: "62 ans et plus",
     id: "SENIOR",
     title: "Retraité / senior",
     description: "Pour accompagner un proche vers une offre Navigo Senior ou Améthyste.",
     enabled: true,
   },
   {
+    ageHint: "Adulte",
     id: "SPOUSE",
     title: "Conjoint",
     description: "Pour gérer les titres d’un autre adulte du foyer.",
     enabled: false,
   },
   {
+    ageHint: "Jusqu'a 26 ans",
     id: "STUDENT",
     title: "Étudiant",
     description: "Pour suivre un forfait étudiant ou une situation de bourse.",
     enabled: false,
   },
   {
+    ageHint: "Selon situation",
     id: "CAREGIVER",
     title: "Proche aidé",
     description: "Pour accompagner une personne dans ses démarches.",
     enabled: false,
   },
   {
+    ageHint: "Selon l'aide ou le droit",
     id: "DISCOUNT",
     title: "Bénéficiaire d’une réduction",
     description: "Pour vérifier une aide ou une tarification solidaire.",
@@ -117,8 +124,10 @@ function SelectField({
   value: string;
 }) {
   return (
-    <label className="block w-full text-xs font-bold uppercase tracking-wide text-neutral-medium">
-      <span>{label}</span>
+    <div className="w-full">
+      <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
+        {label}
+      </label>
       <select
         className={memberSelectClassName}
         onChange={(event) => onChange(event.target.value)}
@@ -126,7 +135,7 @@ function SelectField({
       >
         {children}
       </select>
-    </label>
+    </div>
   );
 }
 
@@ -239,6 +248,11 @@ export function RegisterFamilyMemberStep({ errors, members, onChange }: Register
                   {isSelected ? <Badge tone="blue">Sélectionné</Badge> : null}
                 </div>
                 <p className="mt-3 text-sm leading-6 text-neutral-medium">{card.description}</p>
+                {card.ageHint ? (
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-idfm-interaction">
+                    {card.ageHint}
+                  </p>
+                ) : null}
               </button>
             );
           })}

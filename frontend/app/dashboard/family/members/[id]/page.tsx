@@ -66,7 +66,8 @@ export default function MemberDetailPage() {
 
     try {
       const response = await createLostPassSupportCase(accessToken, payload);
-      const isTransfer = payload.chosenResolution === "TRANSFER_TO_PHONE";
+      const isTemporaryTransfer = ["TRANSFER_TO_PHONE", "TEMPORARY_DIGITAL_TRANSFER"].includes(payload.chosenResolution);
+      const isPermanentDigital = payload.chosenResolution === "PERMANENT_DIGITAL_TRANSFER";
 
       startTransition(() => {
         setDetail((current) => (
@@ -75,10 +76,12 @@ export default function MemberDetailPage() {
                 ...current,
                 member: {
                   ...current.member,
-                  status: isTransfer ? current.member.status : "LOST",
-                  nextAction: isTransfer
-                    ? "Titre disponible sur smartphone"
-                    : "Suivre la demande de remplacement",
+                  status: isTemporaryTransfer || isPermanentDigital ? current.member.status : "LOST",
+                  nextAction: isTemporaryTransfer
+                    ? "Titre disponible sur support numerique temporaire"
+                    : isPermanentDigital
+                      ? "Titre conserve sur support numerique"
+                      : "Suivre la demande de nouvelle carte",
                 },
               }
             : current
@@ -212,11 +215,7 @@ export default function MemberDetailPage() {
           <section className="h-fit rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold text-idfm-anthracite">Actions utiles</h2>
             <div className="mt-5 grid gap-3">
-              <Link href={memberTitleAction.primaryHref} className="contents">
-                <Button type="button" variant={memberTitleAction.canStartSubscription ? "primary" : "secondary"}>
-                  {memberTitleAction.primaryLabel}
-                </Button>
-              </Link>
+    
               {secondaryTitleAction ? (
                 <Link href={secondaryTitleAction.href} className="contents">
                   <Button type="button" variant="secondary">{secondaryTitleAction.label}</Button>
@@ -227,10 +226,7 @@ export default function MemberDetailPage() {
                   SOS Navigo
                 </Button>
               ) : null}
-              <InfoBox tone={memberTitleAction.blocksNewSubscription ? "orange" : "blue"}>
-                <span className="font-semibold text-idfm-anthracite">{memberTitleAction.statusLabel}</span>
-                <span className="mt-1 block">{memberTitleAction.message}</span>
-              </InfoBox>
+
               {filteredDetailActions.map((action) => (
                 action.href ? (
                   <Link key={`${action.label}-${action.href}`} href={action.href} className="contents">

@@ -44,6 +44,33 @@ const REASON_OPTIONS: Array<{ value: LostPassReason; title: string; description:
   { value: "UNKNOWN", title: "Je ne sais pas", description: "La situation n'est pas claire." },
 ];
 
+function getResolutionConsequences(resolution: SupportCaseResolution | null) {
+  switch (resolution) {
+    case "TRANSFER_TO_PHONE":
+    case "TEMPORARY_DIGITAL_TRANSFER":
+    case "DEACTIVATE_ONLY":
+    case "REPLACEMENT_CARD":
+    case "PERMANENT_DIGITAL_TRANSFER":
+    default:
+      return [];
+  }
+}
+
+function getResolutionConfirmationLabel(resolution: SupportCaseResolution | null) {
+  switch (resolution) {
+    case "TRANSFER_TO_PHONE":
+    case "TEMPORARY_DIGITAL_TRANSFER":
+      return "Transfert numerique temporaire demande";
+    case "DEACTIVATE_ONLY":
+    case "REPLACEMENT_CARD":
+      return "Nouvelle carte demandee";
+    case "PERMANENT_DIGITAL_TRANSFER":
+      return "Passage definitif en numerique";
+    default:
+      return "—";
+  }
+}
+
 function profileTypeLabel(profileType: DashboardMember["profileType"]) {
   switch (profileType) {
     case "MANAGER":
@@ -148,7 +175,11 @@ export function LostPassFlow({
       aria-modal="true"
       aria-label="Declarer un passe perdu"
     >
-      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+      <div
+        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl ${
+          step === 2 ? "max-w-6xl" : step === 3 ? "max-w-3xl" : "max-w-2xl"
+        }`}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-neutral-light p-5">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-idfm-interaction">SOS Navigo</p>
@@ -274,25 +305,39 @@ export function LostPassFlow({
               <div>
                 <h3 className="text-lg font-bold text-idfm-anthracite">Comment souhaitez-vous continuer ?</h3>
                 <p className="mt-1 text-sm text-neutral-medium">
-                  Choisissez la solution la plus adaptee. On vous guide.
+                  Choisissez simplement la suite la plus adaptee.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-3">
                 <ResolutionChoiceCard
-                  title="Transferer le titre sur mon telephone"
-                  description="Votre titre est disponible sur votre telephone de facon temporaire pendant le traitement. Le pass physique est desactive pour eviter la fraude."
-                  note="Le dossier reste ouvert jusqu'au choix final ou a la recuperation au guichet."
-                  ctaLabel="Effectuer le transfert"
-                  selected={resolution === "TRANSFER_TO_PHONE"}
-                  onSelect={() => selectResolution("TRANSFER_TO_PHONE")}
+                  badge="Continuer a voyager"
+                  title="Transferer temporairement mon titre en numerique"
+                  description="Vous continuez a voyager sur votre smartphone pendant le traitement."
+                  consequences={getResolutionConsequences("TEMPORARY_DIGITAL_TRANSFER")}
+                  note="Si le pass est retrouve, vous choisirez plus tard entre digital et physique."
+                  ctaLabel="Choisir cette option"
+                  selected={resolution === "TEMPORARY_DIGITAL_TRANSFER"}
+                  onSelect={() => selectResolution("TEMPORARY_DIGITAL_TRANSFER")}
                 />
                 <ResolutionChoiceCard
-                  title="Desactiver le pass"
-                  description="Le pass perdu est desactive pour le securiser, le temps de recevoir un nouveau support."
-                  note="Cette option ne transfere pas votre titre. Elle securise simplement le pass perdu."
-                  ctaLabel="Desactiver le pass"
-                  selected={resolution === "DEACTIVATE_ONLY"}
-                  onSelect={() => selectResolution("DEACTIVATE_ONLY")}
+                  badge="Nouvelle carte"
+                  title="Desactiver mon pass et demander une nouvelle carte"
+                  description="Le pass perdu est stoppe et une nouvelle carte est demandee."
+                  consequences={getResolutionConsequences("REPLACEMENT_CARD")}
+                  note="A choisir si vous ne souhaitez pas utiliser le support numerique."
+                  ctaLabel="Choisir cette option"
+                  selected={resolution === "REPLACEMENT_CARD"}
+                  onSelect={() => selectResolution("REPLACEMENT_CARD")}
+                />
+                <ResolutionChoiceCard
+                  badge="100 % numerique"
+                  title="Passer definitivement en support numerique"
+                  description="Votre titre passe en numerique de facon durable."
+                  consequences={getResolutionConsequences("PERMANENT_DIGITAL_TRANSFER")}
+                  note="Aucune nouvelle carte physique n'est prevue."
+                  ctaLabel="Choisir cette option"
+                  selected={resolution === "PERMANENT_DIGITAL_TRANSFER"}
+                  onSelect={() => selectResolution("PERMANENT_DIGITAL_TRANSFER")}
                 />
               </div>
             </div>
@@ -338,12 +383,17 @@ export function LostPassFlow({
                 <div className="flex justify-between gap-4">
                   <dt className="text-neutral-medium">Consequence</dt>
                   <dd className="text-right font-semibold text-idfm-anthracite">
-                    {resolution === "TRANSFER_TO_PHONE"
-                      ? "Transfert telephone demande"
-                      : "Pass desactive"}
+                    {getResolutionConfirmationLabel(resolution)}
                   </dd>
                 </div>
               </dl>
+
+              <div className="grid gap-2 rounded-2xl border border-neutral-light bg-white p-4 text-sm text-idfm-anthracite">
+                <p className="font-semibold">Consequences principales</p>
+                {getResolutionConsequences(resolution).map((consequence) => (
+                  <p key={consequence}>- {consequence}</p>
+                ))}
+              </div>
 
               <InfoBox tone="orange">
                 Une fois confirmee, cette declaration peut entrainer la desactivation du pass physique.
@@ -354,7 +404,7 @@ export function LostPassFlow({
                 name="lost-pass-understands"
                 checked={understands}
                 onChange={(event) => setUnderstands(event.target.checked)}
-                label="Je comprends que le pass physique sera desactive."
+                label="Je comprends les consequences de cette declaration."
               />
             </div>
           ) : null}
@@ -471,14 +521,18 @@ export function LostPassFlow({
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-idfm-anthracite">
-              {resolution === "TRANSFER_TO_PHONE"
-                ? "Effectuer le transfert maintenant ?"
-                : "Desactiver le pass maintenant ?"}
+              {resolution === "PERMANENT_DIGITAL_TRANSFER"
+                ? "Confirmer le passage definitif en numerique ?"
+                : resolution === "REPLACEMENT_CARD" || resolution === "DEACTIVATE_ONLY"
+                  ? "Confirmer la demande de nouvelle carte ?"
+                  : "Confirmer le transfert numerique temporaire ?"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-neutral-medium">
-              {resolution === "TRANSFER_TO_PHONE"
-                ? "Votre pass physique sera immediatement desactive et votre titre sera disponible temporairement sur smartphone. Le dossier restera ouvert jusqu'au choix final."
-                : "Votre pass physique sera desactive. Vous pourrez annuler tant qu'un agent n'a pas traite la demande."}
+              {resolution === "PERMANENT_DIGITAL_TRANSFER"
+                ? "Votre pass physique perdu sera desactive. Le titre restera sur support numerique et aucun nouveau pass physique ne sera demande."
+                : resolution === "REPLACEMENT_CARD" || resolution === "DEACTIVATE_ONLY"
+                  ? "Votre pass physique sera desactive et une demande de nouvelle carte sera enregistree."
+                  : "Votre pass physique sera considere comme perdu et votre titre sera disponible temporairement sur smartphone jusqu'au choix final."}
             </p>
 
             <div className="mt-3">
@@ -497,9 +551,11 @@ export function LostPassFlow({
               <Button type="button" disabled={isSubmitting} onClick={() => void handleConfirm()}>
                 {isSubmitting
                   ? "Traitement..."
-                  : resolution === "TRANSFER_TO_PHONE"
-                    ? "Oui, effectuer le transfert"
-                    : "Oui, desactiver le pass"}
+                  : resolution === "PERMANENT_DIGITAL_TRANSFER"
+                    ? "Passer en numerique"
+                    : resolution === "REPLACEMENT_CARD" || resolution === "DEACTIVATE_ONLY"
+                      ? "Demander une nouvelle carte"
+                      : "Activer le numerique temporaire"}
               </Button>
             </div>
           </div>

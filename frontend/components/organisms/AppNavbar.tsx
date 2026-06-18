@@ -36,10 +36,10 @@ const navGroupsAuth: NavGroup[] = [
     ],
   },
   {
-    label: "Services",
+    label: "SOS Navigo",
     href: "/dashboard/family?tab=services",
     children: [
-      { href: "/dashboard/family?tab=services", label: "Tous les services" },
+      { href: "/dashboard/family?tab=services", label: "SOS Navigo" },
       { href: "/found-pass", label: "Signaler un passé trouvé" },
     ],
   },
@@ -76,7 +76,7 @@ const mobileLinksAuth = [
   { href: "/dashboard/family?tab=profiles", label: "Mes profils" },
   { href: "/dashboard/family?tab=titles", label: "Mes titres" },
   { href: "/dashboard/family?tab=demarches", label: "Mes démarches" },
-  { href: "/dashboard/family?tab=services", label: "Services" },
+  { href: "/dashboard/family?tab=services", label: "SOS Navigo" },
   { href: "/found-pass", label: "Signaler un passé trouvé" },
   { href: "/dashboard/family?tab=help", label: "Aide et contacts" },
   { href: "/dashboard/family?tab=alerts", label: "Mes alertes" },

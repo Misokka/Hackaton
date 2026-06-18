@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, startTransition, useEffect, useState } from "react";
+import { Suspense, startTransition, useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/atoms/Button";
@@ -11,7 +11,6 @@ import { FamilyAlertsSection } from "@/components/organisms/FamilyAlertsSection"
 import { FamilyHelpSection } from "@/components/organisms/FamilyHelpSection";
 import { FamilyMembersSection } from "@/components/organisms/FamilyMembersSection";
 import { FamilyProceduresSection } from "@/components/organisms/FamilyProceduresSection";
-import { FamilyQuickActions } from "@/components/organisms/FamilyQuickActions";
 import { FamilyRecentActivity } from "@/components/organisms/FamilyRecentActivity";
 import { FamilyWelcomeSection } from "@/components/organisms/FamilyWelcomeSection";
 // import { LostPassModal } from "@/components/organisms/LostPassModal";
@@ -67,6 +66,21 @@ function buildSummaryItems(data: HouseholdDashboardResponse) {
   ];
 }
 
+function scrollToServicesTabs() {
+  const tabs = document.getElementById("family-dashboard-tabs");
+
+  if (!tabs) {
+    return;
+  }
+
+  const top = tabs.getBoundingClientRect().top + window.scrollY;
+
+  window.scrollTo({
+    top: Math.max(top, 0),
+    behavior: "auto",
+  });
+}
+
 function RecoveredPassModal({
   supportCase,
   isSubmitting,
@@ -107,7 +121,7 @@ function RecoveredPassModal({
         </div>
 
         <div className="mt-5 rounded-md border border-neutral-light bg-neutral-xlight p-4 text-sm text-idfm-anthracite">
-          <p><span className="font-semibold">Pass :</span> {supportCase.passNumberMasked ?? "****"}</p>
+          <p><span className="font-semibold">Pass :</span> {supportCase.passNumberMasked ?? "Numero indisponible"}</p>
           <p className="mt-2"><span className="font-semibold">Guichet :</span> {supportCase.foundDeskName ?? supportCase.foundLocation ?? "Guichet indique"}</p>
           <p className="mt-2"><span className="font-semibold">Adresse :</span> {supportCase.foundDeskAddress ?? "Adresse communiquee par l'agent"}</p>
           {supportCase.pickupDeadlineAt ? (
@@ -195,6 +209,7 @@ function FamilyDashboardPageContent() {
   const [selectedRecoveredCase, setSelectedRecoveredCase] = useState<SupportCaseSummary | null>(null);
   const [isSubmittingRecoveredChoice, setIsSubmittingRecoveredChoice] = useState(false);
   const activeTab = getActiveTab(searchParams.get("tab"));
+  const targetSection = searchParams.get("section");
 
   function openLostPassFlow(memberId?: string) {
     setSelectedMemberId(memberId);
@@ -210,16 +225,34 @@ function FamilyDashboardPageContent() {
     return () => window.clearTimeout(timeoutId);
   }, [flash]);
 
-  useEffect(() => {
-    if (isLoading || activeTab !== "services" || window.location.hash !== "#sos-navigo") {
+  useLayoutEffect(() => {
+    if (isLoading || activeTab !== "services" || targetSection !== "sos-navigo") {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      document.getElementById("sos-navigo")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 150);
-    return () => window.clearTimeout(timeoutId);
-  }, [isLoading, activeTab]);
+    let cancelled = false;
+    let attempts = 0;
+
+    const alignScroll = () => {
+      if (cancelled) {
+        return;
+      }
+
+      scrollToServicesTabs();
+      attempts += 1;
+
+      if (attempts < 4) {
+        window.setTimeout(alignScroll, 120);
+      }
+    };
+
+    const timeoutId = window.setTimeout(alignScroll, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLoading, activeTab, targetSection]);
 
   useEffect(() => {
     const accessToken = localStorage.getItem("familyAccessToken");
@@ -264,10 +297,13 @@ function FamilyDashboardPageContent() {
     try {
       const response = await createLostPassSupportCase(accessToken, payload);
       const targetMember = data?.members.find((member) => member.id === payload.memberId);
-      const isTransfer = payload.chosenResolution === "TRANSFER_TO_PHONE";
-      const activityLabel = isTransfer
-        ? `${targetMember?.firstName ?? "Le profil"} a transfere son titre sur smartphone.`
-        : `${targetMember?.firstName ?? "Le profil"} a signale une perte de passe.`;
+      const isTemporaryTransfer = ["TRANSFER_TO_PHONE", "TEMPORARY_DIGITAL_TRANSFER"].includes(payload.chosenResolution);
+      const isPermanentDigital = payload.chosenResolution === "PERMANENT_DIGITAL_TRANSFER";
+      const activityLabel = isTemporaryTransfer
+        ? `${targetMember?.firstName ?? "Le profil"} a active un transfert numerique temporaire.`
+        : isPermanentDigital
+          ? `${targetMember?.firstName ?? "Le profil"} est passe definitivement au support numerique.`
+          : `${targetMember?.firstName ?? "Le profil"} a demande une nouvelle carte apres perte du pass.`;
 
       startTransition(() => {
         setData((current) => (
@@ -278,12 +314,12 @@ function FamilyDashboardPageContent() {
                   member.id === payload.memberId
                     ? {
                         ...member,
-                        // Transfert : le titre reste actif (sur smartphone).
-                        // Desactivation : le pass est marque comme perdu.
-                        status: isTransfer ? member.status : "LOST",
-                        nextAction: isTransfer
-                          ? "Titre disponible sur smartphone"
-                          : "Suivre la demande de remplacement",
+                        status: isTemporaryTransfer || isPermanentDigital ? member.status : "LOST",
+                        nextAction: isTemporaryTransfer
+                          ? "Titre disponible sur support numerique temporaire"
+                          : isPermanentDigital
+                            ? "Titre conserve sur support numerique"
+                            : "Suivre la demande de nouvelle carte",
                       }
                     : member
                 )),
@@ -435,12 +471,11 @@ function FamilyDashboardPageContent() {
         );
       case "services":
         return (
-          <div className="grid gap-12">
+          <div className="min-h-[70vh]">
             <SosNavigoSection
               onDeclareLostPass={() => openLostPassFlow()}
               refreshSignal={sosRefreshSignal}
             />
-            <FamilyQuickActions members={data.members} />
           </div>
         );
       case "demarches":
@@ -460,7 +495,6 @@ function FamilyDashboardPageContent() {
               onDeclareLostPass={() => openLostPassFlow()}
               refreshSignal={sosRefreshSignal}
             />
-            <FamilyQuickActions members={data.members} />
             <FamilyHelpSection />
             <FamilyRecentActivity items={data.recentActivity} />
           </div>
@@ -501,7 +535,7 @@ function FamilyDashboardPageContent() {
                   </h2>
                   <p className="mt-1 text-sm">
                     {supportCase.foundDeskName ?? supportCase.foundLocation ?? "Guichet indique"}
-                    {supportCase.foundDeskAddress ? ` - ${supportCase.foundDeskAddress}` : ""} - {supportCase.passNumberMasked ?? "****"}
+                    {supportCase.foundDeskAddress ? ` - ${supportCase.foundDeskAddress}` : ""} - {supportCase.passNumberMasked ?? "Numero indisponible"}
                     {supportCase.pickupDeadlineAt ? ` - avant le ${new Intl.DateTimeFormat("fr-FR").format(new Date(supportCase.pickupDeadlineAt))}` : ""}
                   </p>
                 </div>

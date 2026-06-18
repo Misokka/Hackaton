@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { NavigoPass, NavigoPassStatus, NavigoPassSupportType } from "@prisma/client";
 import { PrismaService } from "src/prisma/prisma.service";
+import { buildNavigoNumber } from "./navigo-number.util";
 
 const MONTHLY_SWITCH_LIMIT = 3;
 
@@ -11,16 +12,6 @@ export class NavigoPassesService {
   private getCurrentMonthStart() {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  }
-
-  private maskNavigoNumber(navigoNumber: string) {
-    const lastFour = navigoNumber.slice(-4);
-    return `NAV-****-${lastFour}`;
-  }
-
-  private buildNavigoNumber(memberId: string) {
-    const compact = memberId.replace(/-/g, "").toUpperCase();
-    return `NAV-${compact.slice(0, 4)}-${compact.slice(-4)}`;
   }
 
   private async assertMemberBelongsToUser(userId: string, memberId: string) {
@@ -80,7 +71,7 @@ export class NavigoPassesService {
     const pass = await this.prismaService.navigoPass.create({
       data: {
         householdMemberId: member.id,
-        navigoNumber: this.buildNavigoNumber(member.id),
+        navigoNumber: buildNavigoNumber(member.id),
         productName: activeSubscription?.productName ?? activeRequest?.offer.name ?? "Titre Navigo",
         status: activeSubscription ? "ACTIVE" : "IN_PROGRESS",
         supportType: "PHYSICAL",
@@ -124,7 +115,7 @@ export class NavigoPassesService {
     return {
       id: pass.id,
       holderName: `${firstName} ${lastName}`.trim(),
-      navigoNumberMasked: this.maskNavigoNumber(pass.navigoNumber),
+      navigoNumberMasked: pass.navigoNumber,
       productName: pass.productName,
       supportType: pass.supportType,
       status: pass.status,

@@ -11,31 +11,19 @@ export function RegisterIntentStep({ onFamilyStart, onUnavailable }: RegisterInt
     <div className="grid gap-4 sm:grid-cols-2">
       <ChoiceCard
         action="Commencer"
-        description="Ajoutez vos enfants, renouvelez leurs forfaits et suivez leurs dossiers depuis un seul espace."
-        imageSrc={getIntentVisual("family")}
+        centered
+        description="Ajoutez vos enfants et vos grands parents, renouvelez leurs forfaits et suivez leurs dossiers depuis un seul espace."
+        imageSrc="/assets/illustrations/register-family.svg"
         onClick={onFamilyStart}
-        title="Créer un compte pour moi et ma famille"
+        title="Compte famille"
       />
       <ChoiceCard
-        action="Bientôt disponible"
+        action="Commencez"
+        centered
         description="Répondez à quelques questions et obtenez une recommandation adaptée."
         imageSrc={getIntentVisual("personal")}
         onClick={() => onUnavailable("Trouver le bon forfait pour moi")}
-        title="Trouver le bon forfait pour moi"
-      />
-      <ChoiceCard
-        action="Bientôt disponible"
-        description="Découvrez les aides possibles et les justificatifs nécessaires."
-        imageSrc={getIntentVisual("discount")}
-        onClick={() => onUnavailable("Vérifier mes droits à une réduction")}
-        title="Vérifier mes droits à une réduction"
-      />
-      <ChoiceCard
-        action="Bientôt disponible"
-        description="Accompagnez une personne dans ses démarches en gardant un suivi clair."
-        imageSrc={getIntentVisual("helper")}
-        onClick={() => onUnavailable("Aider un proche")}
-        title="Aider un proche"
+        title="Compte personnel"
       />
     </div>
   );

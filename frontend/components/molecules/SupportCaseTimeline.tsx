@@ -5,41 +5,89 @@ type SupportCaseTimelineProps = {
   status: SupportCaseStatus;
 };
 
+function isTemporaryTransfer(resolution: SupportCaseResolution | null) {
+  return resolution === "TRANSFER_TO_PHONE" || resolution === "TEMPORARY_DIGITAL_TRANSFER";
+}
+
+function isReplacementCard(resolution: SupportCaseResolution | null) {
+  return resolution === "DEACTIVATE_ONLY" || resolution === "REPLACEMENT_CARD";
+}
+
 function buildSteps(chosenResolution: SupportCaseResolution | null) {
-  const resolutionStep =
-    chosenResolution === "TRANSFER_TO_PHONE"
-      ? "Solution temporaire demandee"
-      : "Pass physique a desactiver";
+  if (isTemporaryTransfer(chosenResolution)) {
+    return [
+      "Perte declaree",
+      "Titre transfere en numerique",
+      "En attente d'un eventuel retour du pass",
+      "Client notifie si pass retrouve",
+      "Choix final du support",
+    ];
+  }
+
+  if (isReplacementCard(chosenResolution)) {
+    return [
+      "Perte declaree",
+      "Pass desactive",
+      "Nouvelle carte demandee",
+      "Nouvelle carte en preparation",
+      "Dossier cloture",
+    ];
+  }
 
   return [
-    "Declaration recue",
-    "Verification en cours",
-    resolutionStep,
-    "Pass retrouve",
-    "Client notifie",
-    "Pass recupere",
-    "Choix final enregistre",
+    "Perte declaree",
+    "Pass physique desactive",
+    "Titre transfere definitivement en numerique",
+    "Dossier cloture",
   ];
 }
 
-function getActiveIndex(status: SupportCaseStatus) {
+function getActiveIndex(status: SupportCaseStatus, chosenResolution: SupportCaseResolution | null) {
+  if (isTemporaryTransfer(chosenResolution)) {
+    switch (status) {
+      case "OPEN":
+        return 0;
+      case "IN_PROGRESS":
+        return 1;
+      case "TRANSFER_TO_PHONE_REQUESTED":
+        return 2;
+      case "PASS_FOUND_WAITING_PICKUP":
+        return 3;
+      case "PASS_PICKED_UP":
+      case "DIGITAL_SUPPORT_CONFIRMED":
+      case "PHYSICAL_PASS_REACTIVATION_REQUESTED":
+      case "PHYSICAL_PASS_REACTIVATED":
+      case "RESOLVED":
+        return 4;
+      default:
+        return 0;
+    }
+  }
+
+  if (isReplacementCard(chosenResolution)) {
+    switch (status) {
+      case "OPEN":
+        return 0;
+      case "IN_PROGRESS":
+        return 1;
+      case "PASS_DEACTIVATION_REQUESTED":
+        return 2;
+      case "RESOLVED":
+        return 4;
+      default:
+        return 2;
+    }
+  }
+
   switch (status) {
     case "OPEN":
       return 0;
     case "IN_PROGRESS":
       return 1;
-    case "TRANSFER_TO_PHONE_REQUESTED":
-    case "PASS_DEACTIVATION_REQUESTED":
-      return 2;
-    case "PASS_FOUND_WAITING_PICKUP":
-      return 4;
-    case "PASS_PICKED_UP":
-      return 5;
+    case "PERMANENT_DIGITAL_TRANSFER_REQUESTED":
     case "DIGITAL_SUPPORT_CONFIRMED":
-    case "PHYSICAL_PASS_REACTIVATION_REQUESTED":
-    case "PHYSICAL_PASS_REACTIVATED":
     case "RESOLVED":
-      return 6;
+      return 3;
     default:
       return 0;
   }
@@ -48,7 +96,7 @@ function getActiveIndex(status: SupportCaseStatus) {
 export function SupportCaseTimeline({ chosenResolution, status }: SupportCaseTimelineProps) {
   const steps = buildSteps(chosenResolution);
   const isCancelled = status === "CANCELLED_BY_USER";
-  const activeIndex = getActiveIndex(status);
+  const activeIndex = getActiveIndex(status, chosenResolution);
 
   return (
     <ol className="grid gap-0">

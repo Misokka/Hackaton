@@ -165,7 +165,7 @@ export function NavigoPassSection({ pass, memberName, onSwitchSupport }: NavigoP
               </div>
               <div>
                 <p className="text-sm font-bold uppercase tracking-wide text-neutral-medium">ID Navigo</p>
-                <p className="font-semibold text-idfm-anthracite">{currentPass.navigoNumberMasked}</p>
+                <p className="font-semibold text-idfm-anthracite whitespace-nowrap">{currentPass.navigoNumberMasked}</p>
               </div>
             </div>
             <div>

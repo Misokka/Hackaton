@@ -7,6 +7,7 @@ import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { InfoBox } from "@/components/molecules/InfoBox";
+import { TablePagination } from "@/components/molecules/TablePagination";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
 import {
   getAdminDashboard,
@@ -27,6 +28,7 @@ import type {
   DashboardMemberProfileType,
   SubscriptionRequestStatus,
 } from "@/lib/api/types";
+import { paginateItems } from "@/lib/pagination";
 
 type StoredUser = {
   firstName?: string;
@@ -65,6 +67,8 @@ const requestStatusLabels: Record<SubscriptionRequestStatus, string> = {
   CANCELLED: "Annulee",
   EXPIRED: "Expiree",
 };
+
+const PAGE_SIZE = 10;
 
 function getStatusLabel(status: string) {
   if (status === "DRAFT") return "Brouillon";
@@ -231,7 +235,7 @@ function ManagementModal({
                       <Badge tone={badgeTone(supportCase.status)}>{supportCase.status}</Badge>
                     </div>
                     <p className="mt-2 text-neutral-medium">{supportCase.description ?? supportCase.foundLocation ?? "Aucun detail"}</p>
-                    <p className="mt-2 text-neutral-medium">Passe : {supportCase.passNumberMasked ?? "numero masque indisponible"}</p>
+                    <p className="mt-2 text-neutral-medium">Numero Navigo : {supportCase.passNumberMasked ?? "numero indisponible"}</p>
                   </article>
                 )) : <p className="text-sm text-neutral-medium">Aucun dossier SOS Navigo.</p>}
               </div>
@@ -267,10 +271,12 @@ export default function AdminDashboardPage() {
   const [managementDetail, setManagementDetail] = useState<AdminManagementDetail | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<AdminSearchResult[]>([]);
+  const [usersPage, setUsersPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const userName = storedUser?.firstName ? `${storedUser.firstName} ${storedUser.lastName ?? ""}`.trim() : "Admin";
+  const usersPagination = paginateItems(users, usersPage, PAGE_SIZE);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -294,6 +300,7 @@ export default function AdminDashboardPage() {
           setDashboard(dashboardResponse);
           setUsers(usersResponse);
           setFamilies(familiesResponse);
+          setUsersPage(1);
           setError(null);
           setIsLoading(false);
         });
@@ -369,28 +376,32 @@ export default function AdminDashboardPage() {
         {error ? <InfoBox tone="red">{error}</InfoBox> : null}
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
+          <div className="rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
             <div>
               <h2 className="text-lg font-bold text-idfm-anthracite">Demandes de titres</h2>
               <p className="mt-1 text-sm text-neutral-medium">
                 Valider les justificatifs et créer les titres actifs après contrôle.
               </p>
             </div>
-            <Link href="/admin/titles" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
-              Ouvrir les demandes
-            </Link>
+            <div className="mt-4">
+              <Link href="/admin/titles" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
+                Ouvrir les demandes
+              </Link>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
+          <div className="rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
             <div>
               <h2 className="text-lg font-bold text-idfm-anthracite">Centre SOS Navigo</h2>
               <p className="mt-1 text-sm text-neutral-medium">
                 Retrouver un dossier, enregistrer un pass retrouve et notifier une famille.
               </p>
             </div>
-            <Link href="/admin/sos-navigo" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
-              Ouvrir SOS Navigo
-            </Link>
+            <div className="mt-4">
+              <Link href="/admin/sos-navigo" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
+                Ouvrir SOS Navigo
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -407,7 +418,7 @@ export default function AdminDashboardPage() {
           <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
             <input
               className="min-h-12 rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
-              placeholder="Rechercher nom, prenom, email, numero client, passe masque..."
+              placeholder="Rechercher nom, prenom, email, numero client, numero Navigo..."
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -475,7 +486,7 @@ export default function AdminDashboardPage() {
               <span>Famille</span>
               <span>Action</span>
             </div>
-            {users.length ? users.map((adminUser) => (
+            {users.length ? usersPagination.items.map((adminUser) => (
               <div key={adminUser.id} className="grid grid-cols-1 items-center gap-3 border-b border-neutral-light px-4 py-4 text-sm last:border-b-0 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.9fr_1fr_1fr_auto]">
                 <div>
                   <p className="font-bold text-idfm-anthracite">{adminUser.lastName}</p>
@@ -491,6 +502,17 @@ export default function AdminDashboardPage() {
                 </Button>
               </div>
             )) : <div className="p-6"><EmptyState title="Aucun utilisateur" description="Les utilisateurs apparaîtront apres le seed." /></div>}
+            {users.length ? (
+              <TablePagination
+                page={usersPagination.page}
+                pageCount={usersPagination.pageCount}
+                start={usersPagination.start + 1}
+                end={usersPagination.end}
+                total={usersPagination.total}
+                onPrevious={() => setUsersPage((current) => Math.max(current - 1, 1))}
+                onNext={() => setUsersPage((current) => Math.min(current + 1, usersPagination.pageCount))}
+              />
+            ) : null}
           </section>
         ) : null}
 

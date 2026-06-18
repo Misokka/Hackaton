@@ -52,6 +52,9 @@ export function DashboardLayout({
   title,
   userName,
 }: DashboardLayoutProps) {
+  const isAdminLayout = basePath.startsWith("/dashboard/admin") || activeTab === "admin" || activeTab === "sos-navigo";
+  const sosHref = isAdminLayout ? "/admin/sos-navigo" : "/dashboard/family?tab=services&section=sos-navigo";
+
   return (
     <main className="min-h-screen bg-neutral-xlight">
       <AppNavbar userName={userName} />
@@ -76,7 +79,8 @@ export function DashboardLayout({
           </nav>
 
           <Link
-            href="/dashboard/family?tab=services#sos-navigo"
+            href={sosHref}
+            scroll={false}
             className="inline-flex min-h-10 items-center gap-2 rounded-full bg-idfm-interaction px-4 text-sm font-bold text-white shadow-sm transition hover:bg-idfm-interaction/90 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-idfm-focus"
           >
             SOS Navigo

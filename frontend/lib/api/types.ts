@@ -307,7 +307,12 @@ export type NavigoPass = {
 
 export type LostPassReason = "LOST" | "STOLEN" | "DAMAGED" | "UNKNOWN";
 
-export type SupportCaseResolution = "TRANSFER_TO_PHONE" | "DEACTIVATE_ONLY";
+export type SupportCaseResolution =
+  | "TRANSFER_TO_PHONE"
+  | "DEACTIVATE_ONLY"
+  | "TEMPORARY_DIGITAL_TRANSFER"
+  | "REPLACEMENT_CARD"
+  | "PERMANENT_DIGITAL_TRANSFER";
 
 export type SupportCaseType = "LOST_PASS" | "FOUND_PASS" | "DOCUMENT_REJECTED" | "PAYMENT_BLOCKED";
 
@@ -316,6 +321,7 @@ export type SupportCaseStatus =
   | "IN_PROGRESS"
   | "TRANSFER_TO_PHONE_REQUESTED"
   | "PASS_DEACTIVATION_REQUESTED"
+  | "PERMANENT_DIGITAL_TRANSFER_REQUESTED"
   | "PASS_FOUND_WAITING_PICKUP"
   | "PASS_PICKED_UP"
   | "DIGITAL_SUPPORT_CONFIRMED"
@@ -826,6 +832,7 @@ export type AdminSosFilter =
   | "active"
   | "transfer"
   | "deactivation"
+  | "digital-final"
   | "found"
   | "waiting-pickup"
   | "closed"
