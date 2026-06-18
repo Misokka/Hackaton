@@ -46,6 +46,7 @@ export function DashboardLayout({
   breadcrumbs,
   children,
   greeting,
+  showHeaderAction = true,
   showTabs = true,
   subtitle,
   summaryItems,
@@ -89,11 +90,11 @@ export function DashboardLayout({
 
         <div className="mt-6">
           <FamilyDashboardHeader
-            action={
+            action={showHeaderAction ? (
               <Link href="/dashboard/family?tab=help" className="contents">
                 <Button type="button" variant="secondary">Gerer mes informations</Button>
               </Link>
-            }
+            ) : undefined}
             greeting={greeting}
             subtitle={subtitle}
             summaryItems={summaryItems}

@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/atoms/Badge";
@@ -37,6 +38,16 @@ type StoredUser = {
 };
 
 type AdminView = "users" | "families";
+
+type KpiCardProps = {
+  title: string;
+  value: number;
+  description: string;
+  imageSrc: string;
+  imageAlt: string;
+  badge?: string;
+  accentClassName?: string;
+};
 
 const familyStatusLabels: Record<AdminHouseholdStatus, string> = {
   OK: "Stable",
@@ -108,12 +119,37 @@ function badgeTone(status: string): "blue" | "green" | "orange" | "red" {
   return "blue";
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function DashboardMetricCard({
+  title,
+  value,
+  description,
+  imageSrc,
+  imageAlt,
+  badge,
+  accentClassName = "bg-idfm-light",
+}: KpiCardProps) {
   return (
-    <article className="rounded-md border border-neutral-light bg-white p-4 shadow-sm">
-      <p className="text-sm font-semibold text-neutral-medium">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-idfm-anthracite">{value}</p>
+    <article className="rounded-2xl border border-neutral-light bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${accentClassName}`}>
+          <Image src={imageSrc} alt={imageAlt} width={40} height={40} className="h-10 w-10 object-contain" />
+        </div>
+        {badge ? <Badge tone="orange">{badge}</Badge> : null}
+      </div>
+      <div className="mt-4">
+        <p className="text-sm font-semibold text-neutral-medium">{title}</p>
+        <p className="mt-1 text-3xl font-bold text-idfm-anthracite">{value}</p>
+        <p className="mt-2 text-sm leading-6 text-neutral-medium">{description}</p>
+      </div>
     </article>
+  );
+}
+
+function PendingCountBadge({ count }: { count: number }) {
+  return (
+    <span className="inline-flex min-h-7 min-w-7 items-center justify-center rounded-full bg-status-danger px-2 text-xs font-bold text-white">
+      {count}
+    </span>
   );
 }
 
@@ -277,6 +313,12 @@ export default function AdminDashboardPage() {
 
   const userName = storedUser?.firstName ? `${storedUser.firstName} ${storedUser.lastName ?? ""}`.trim() : "Admin";
   const usersPagination = paginateItems(users, usersPage, PAGE_SIZE);
+  const titleRequestsPendingCount = dashboard?.stats.openSubscriptionRequestsCount ?? 0;
+  const sosPendingCount = (dashboard?.stats.lostPassesCount ?? 0) + (dashboard?.stats.foundPassesCount ?? 0);
+  const dossiersToReviewCount = dashboard?.stats.dossiersToReviewCount ?? 0;
+  const digitalPassesCount = dashboard?.supportCases.filter((supportCase) =>
+    ["TEMPORARY_DIGITAL_TRANSFER", "DIGITAL_SUPPORT"].includes(supportCase.chosenResolution ?? ""),
+  ).length ?? 0;
 
   useEffect(() => {
     const token = getAccessToken();
@@ -376,28 +418,44 @@ export default function AdminDashboardPage() {
         {error ? <InfoBox tone="red">{error}</InfoBox> : null}
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
-            <div>
+          <div className="flex h-full flex-col rounded-2xl border border-idfm-medium bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold text-idfm-anthracite">Demandes de titres</h2>
+              {titleRequestsPendingCount > 0 ? <PendingCountBadge count={titleRequestsPendingCount} /> : null}
+            </div>
+            <div className="mt-2">
               <p className="mt-1 text-sm text-neutral-medium">
                 Valider les justificatifs et créer les titres actifs après contrôle.
               </p>
             </div>
-            <div className="mt-4">
+            <div className="mt-5 flex-1">
+              <p className="text-sm font-semibold text-idfm-anthracite">
+                {titleRequestsPendingCount} demande(s) a traiter ou verifier.
+              </p>
+            </div>
+            <div className="mt-5">
               <Link href="/admin/titles" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
                 Ouvrir les demandes
               </Link>
             </div>
           </div>
 
-          <div className="rounded-md border border-idfm-medium bg-white p-4 shadow-sm">
-            <div>
+          <div className="flex h-full flex-col rounded-2xl border border-idfm-medium bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold text-idfm-anthracite">Centre SOS Navigo</h2>
+              {sosPendingCount > 0 ? <PendingCountBadge count={sosPendingCount} /> : null}
+            </div>
+            <div className="mt-2">
               <p className="mt-1 text-sm text-neutral-medium">
                 Retrouver un dossier, enregistrer un pass retrouve et notifier une famille.
               </p>
             </div>
-            <div className="mt-4">
+            <div className="mt-5 flex-1">
+              <p className="text-sm font-semibold text-idfm-anthracite">
+                {sosPendingCount} dossier(s) SOS ouverts ou en attente d&apos;action.
+              </p>
+            </div>
+            <div className="mt-5">
               <Link href="/admin/sos-navigo" className="inline-flex min-h-12 items-center justify-center rounded-md bg-idfm-interaction px-5 text-sm font-semibold text-white transition hover:bg-idfm-focus">
                 Ouvrir SOS Navigo
               </Link>
@@ -405,16 +463,63 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <StatCard label="Familles" value={dashboard?.stats.familiesCount ?? 0} />
-          <StatCard label="Profils" value={dashboard?.stats.profilesCount ?? 0} />
-          <StatCard label="Demandes" value={dashboard?.stats.openSubscriptionRequestsCount ?? 0} />
-          <StatCard label="Passes perdus" value={dashboard?.stats.lostPassesCount ?? 0} />
-          <StatCard label="Passes trouves" value={dashboard?.stats.foundPassesCount ?? 0} />
-          <StatCard label="A verifier" value={dashboard?.stats.dossiersToReviewCount ?? 0} />
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <DashboardMetricCard
+            title="Familles suivies"
+            value={dashboard?.stats.familiesCount ?? 0}
+            description="Foyers actifs dans l'espace famille"
+            imageSrc="/assets/logos/pictogrammes/family-pictogram.png"
+            imageAlt="Familles suivies"
+            badge="Actif"
+          />
+          <DashboardMetricCard
+            title="Profils geres"
+            value={dashboard?.stats.profilesCount ?? 0}
+            description="Enfants, seniors et gestionnaires"
+            imageSrc="/assets/logos/pictogrammes/user-profile-pictogram.png"
+            imageAlt="Profils geres"
+            badge="Vue globale"
+            accentClassName="bg-blue-50"
+          />
+          <DashboardMetricCard
+            title="Demandes de titres"
+            value={titleRequestsPendingCount}
+            description="Souscriptions en cours ou a verifier"
+            imageSrc="/assets/logos/pictogrammes/generic-pass-card.png"
+            imageAlt="Demandes de titres"
+            badge={titleRequestsPendingCount > 0 ? "A traiter" : "A jour"}
+            accentClassName="bg-orange-50"
+          />
+          <DashboardMetricCard
+            title="SOS Navigo"
+            value={sosPendingCount}
+            description="Pertes, passes retrouves et suivis"
+            imageSrc="/assets/illustrations/contactless-validator-round.png"
+            imageAlt="SOS Navigo"
+            badge={sosPendingCount > 0 ? "En cours" : "Cloture"}
+            accentClassName="bg-red-50"
+          />
+          <DashboardMetricCard
+            title="A verifier"
+            value={dossiersToReviewCount}
+            description="Justificatifs ou demandes en attente"
+            imageSrc="/assets/illustrations/service-kiosk-terminal.png"
+            imageAlt="Dossiers a verifier"
+            badge={dossiersToReviewCount > 0 ? "Prioritaire" : "RAS"}
+            accentClassName="bg-amber-50"
+          />
+          <DashboardMetricCard
+            title="Pass numeriques"
+            value={digitalPassesCount}
+            description="Titres actuellement sur support numerique"
+            imageSrc="/assets/illustrations/hand-tapping-contactless.png"
+            imageAlt="Pass numeriques"
+            badge={digitalPassesCount > 0 ? "Digital actif" : "Fallback MVP"}
+            accentClassName="bg-emerald-50"
+          />
         </section>
 
-        <section className="rounded-md border border-neutral-light bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-neutral-light bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
             <input
               className="min-h-12 rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
@@ -476,8 +581,17 @@ export default function AdminDashboardPage() {
         </nav>
 
         {view === "users" ? (
-          <section className="overflow-hidden rounded-md border border-neutral-light bg-white shadow-sm">
-            <div className="grid grid-cols-1 border-b border-neutral-light bg-neutral-xlight px-4 py-3 text-xs font-bold uppercase text-neutral-medium lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.9fr_1fr_1fr_auto]">
+          <section className="overflow-hidden rounded-2xl border border-neutral-light bg-white shadow-sm">
+            <div className="border-b border-neutral-light px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-idfm-anthracite">Utilisateurs et profils</h2>
+                  <p className="text-sm text-neutral-medium">Recherche, suivi des familles et acces rapide a la gestion.</p>
+                </div>
+                <Badge tone="blue">{users.length} lignes</Badge>
+              </div>
+            </div>
+            <div className="hidden border-b border-neutral-light bg-neutral-xlight px-5 py-3 text-xs font-bold uppercase tracking-wide text-neutral-medium lg:grid lg:grid-cols-[1.25fr_1.3fr_0.8fr_1fr_0.95fr_1.1fr_auto]">
               <span>Nom</span>
               <span>Email</span>
               <span>Role</span>
@@ -487,20 +601,60 @@ export default function AdminDashboardPage() {
               <span>Action</span>
             </div>
             {users.length ? usersPagination.items.map((adminUser) => (
-              <div key={adminUser.id} className="grid grid-cols-1 items-center gap-3 border-b border-neutral-light px-4 py-4 text-sm last:border-b-0 lg:grid-cols-[1.2fr_1.2fr_0.8fr_0.9fr_1fr_1fr_auto]">
-                <div>
-                  <p className="font-bold text-idfm-anthracite">{adminUser.lastName}</p>
-                  <p className="text-neutral-medium">{adminUser.firstName}</p>
+              <article key={adminUser.id} className="border-b border-neutral-light last:border-b-0">
+                <div className="grid gap-4 px-4 py-4 lg:hidden">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-base font-bold text-idfm-anthracite">{adminUser.firstName} {adminUser.lastName}</p>
+                      <p className="mt-1 text-sm text-neutral-medium">{adminUser.email || "n/a"}</p>
+                    </div>
+                    <Badge tone={adminUser.role === "ADMIN" ? "orange" : "blue"}>{adminUser.role}</Badge>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl bg-neutral-xlight px-3 py-2">
+                      <p className="text-xs font-bold uppercase text-neutral-medium">Numero client</p>
+                      <p className="mt-1 font-semibold text-idfm-interaction">{adminUser.customerNumber ?? "n/a"}</p>
+                    </div>
+                    <div className="rounded-xl bg-neutral-xlight px-3 py-2">
+                      <p className="text-xs font-bold uppercase text-neutral-medium">Type</p>
+                      <p className="mt-1 font-semibold text-idfm-anthracite">{profileTypeLabels[adminUser.type]}</p>
+                    </div>
+                    <div className="rounded-xl bg-neutral-xlight px-3 py-2 sm:col-span-2">
+                      <p className="text-xs font-bold uppercase text-neutral-medium">Famille</p>
+                      <p className="mt-1 font-semibold text-idfm-anthracite">{adminUser.family?.name ?? "Aucune famille rattachee"}</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="button" variant="secondary" onClick={() => void openManagementModal(adminUser.id)}>
+                      Gerer
+                    </Button>
+                  </div>
                 </div>
-                <span className="text-neutral-medium">{adminUser.email || "n/a"}</span>
-                <Badge tone={adminUser.role === "ADMIN" ? "orange" : "blue"}>{adminUser.role}</Badge>
-                <span className="font-semibold text-idfm-interaction">{adminUser.customerNumber ?? "n/a"}</span>
-                <span>{profileTypeLabels[adminUser.type]}</span>
-                <span>{adminUser.family?.name ?? "Aucune"}</span>
-                <Button type="button" variant="secondary" onClick={() => void openManagementModal(adminUser.id)}>
-                  Gerer
-                </Button>
-              </div>
+
+                <div className="hidden items-center gap-4 px-5 py-4 text-sm lg:grid lg:grid-cols-[1.25fr_1.3fr_0.8fr_1fr_0.95fr_1.1fr_auto]">
+                  <div>
+                    <p className="font-bold text-idfm-anthracite">{adminUser.firstName} {adminUser.lastName}</p>
+                    <p className="mt-1 text-xs uppercase tracking-wide text-neutral-medium">
+                      {adminUser.recordType === "ACCOUNT" ? "Compte principal" : "Profil rattache"}
+                    </p>
+                  </div>
+                  <span className="text-neutral-medium">{adminUser.email || "n/a"}</span>
+                  <Badge tone={adminUser.role === "ADMIN" ? "orange" : "blue"}>{adminUser.role}</Badge>
+                  <span className="inline-flex w-fit items-center rounded-full bg-idfm-light px-3 py-1 font-semibold text-idfm-interaction">
+                    {adminUser.customerNumber ?? "n/a"}
+                  </span>
+                  <Badge tone={adminUser.type === "MANAGER" ? "green" : "blue"}>{profileTypeLabels[adminUser.type]}</Badge>
+                  <div>
+                    <p className="font-semibold text-idfm-anthracite">{adminUser.family?.name ?? "Aucune"}</p>
+                    <p className="mt-1 text-xs text-neutral-medium">{familyStatusLabels[adminUser.status]}</p>
+                  </div>
+                  <div className="justify-self-end">
+                    <Button type="button" variant="secondary" onClick={() => void openManagementModal(adminUser.id)}>
+                      Gerer
+                    </Button>
+                  </div>
+                </div>
+              </article>
             )) : <div className="p-6"><EmptyState title="Aucun utilisateur" description="Les utilisateurs apparaîtront apres le seed." /></div>}
             {users.length ? (
               <TablePagination
