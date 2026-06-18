@@ -34,6 +34,7 @@ import type {
 } from "@/lib/api/types";
 import { familyDashboardMock } from "@/lib/demo/familyDashboardMock";
 import { titleOffersMock } from "@/lib/demo/titleOffersMock";
+import { getMemberTitleAction } from "@/lib/member-title-actions";
 import { getSubscriptionRequestStatusLabel } from "@/lib/subscription-status";
 
 const steps = [
@@ -467,6 +468,12 @@ function ImagineRSubscriptionContent() {
   const selectedOffer = offers.find((offer) => offer.id === selectedOfferId) ?? defaultOfferForMember(selectedMember, offers);
   const payer = data.members.find((member) => member.id === data.manager.id) ?? data.members[0];
   const age = getAge(selectedMember?.birthDate ?? null);
+  const selectedMemberAction = selectedMember ? getMemberTitleAction(selectedMember) : null;
+  const canUseSelectedMember =
+    !selectedMemberAction ||
+    selectedMemberAction.canStartSubscription ||
+    selectedMemberAction.status === "REQUEST_DRAFT" ||
+    selectedMember?.pendingRequest?.id === draft?.id;
   const computedSituation =
     selectedMember?.schoolLevel === "HIGHER_EDUCATION"
       ? "Études supérieures"
@@ -550,6 +557,10 @@ function ImagineRSubscriptionContent() {
 
     if (!selectedMember || !selectedOffer) {
       throw new Error("Choisissez un enfant et une offre imagine R.");
+    }
+
+    if (!canUseSelectedMember) {
+      throw new Error(selectedMemberAction?.message ?? "Ce profil ne peut pas lancer une nouvelle demande.");
     }
 
     if (draft) {
@@ -754,7 +765,23 @@ function ImagineRSubscriptionContent() {
                 />
               ))}
             </div>
-            <InfoBox className="mt-5">Les informations connues du profil seront préremplies dans le dossier.</InfoBox>
+            <div className="mt-5 grid gap-3">
+              <InfoBox>Les informations connues du profil seront préremplies dans le dossier.</InfoBox>
+              {selectedMemberAction && selectedMemberAction.blocksNewSubscription && selectedMemberAction.status !== "REQUEST_DRAFT" ? (
+                <InfoBox tone="orange">
+                  <span className="font-semibold text-idfm-anthracite">{selectedMemberAction.statusLabel}</span>
+                  <span className="mt-1 block">{selectedMemberAction.message}</span>
+                  <Link href={selectedMemberAction.primaryHref} className="mt-3 inline-flex font-semibold text-idfm-interaction">
+                    {selectedMemberAction.primaryLabel}
+                  </Link>
+                </InfoBox>
+              ) : null}
+              {selectedMemberAction?.status === "REQUEST_DRAFT" && selectedMember?.pendingRequest?.id !== draft?.id ? (
+                <InfoBox tone="orange">
+                  Un brouillon existe déjà pour ce profil. En continuant, nous le reprenons au lieu d'en créer un nouveau.
+                </InfoBox>
+              ) : null}
+            </div>
           </SectionCard>
         ) : null}
 
@@ -1041,7 +1068,7 @@ function ImagineRSubscriptionContent() {
             <Button type="button" variant="ghost" onClick={() => setStep((current) => Math.max(current - 1, 0))}>
               Retour
             </Button>
-            <Button type="button" onClick={next} disabled={isSaving || !selectedMember || !selectedOffer}>
+            <Button type="button" onClick={next} disabled={isSaving || !selectedMember || !selectedOffer || !canUseSelectedMember}>
               {isSaving ? "Enregistrement..." : step === 9 ? "Confirmer la demande" : step === 8 ? "Signer et continuer" : "Continuer"}
             </Button>
           </div>
