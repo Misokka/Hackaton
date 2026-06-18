@@ -84,6 +84,10 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function hasValue(value: string | null | undefined) {
+  return Boolean(value && value.trim().length > 0);
+}
+
 function KpiCard({ label, value, helper, tone = "blue" }: {
   label: string;
   value: string | number;
@@ -154,98 +158,79 @@ function CaseModal({
   const isPickupLate = supportCase.pickupDeadlineAt
     ? new Date(supportCase.pickupDeadlineAt).getTime() < renderedAt && supportCase.status === "PASS_FOUND_WAITING_PICKUP"
     : false;
+  const primaryDetails = [
+    { label: "Numero client / famille", value: supportCase.household?.customerNumber ?? supportCase.household?.name ?? null },
+    { label: "Numero Navigo", value: supportCase.passNumberMasked },
+    { label: "Titre concerne", value: supportCase.member?.currentTitle?.productName ?? null },
+    { label: "Solution choisie", value: supportCase.chosenResolution ? resolutionLabels[supportCase.chosenResolution] : null },
+  ].filter((item) => hasValue(item.value));
+  const pickupDetails = [
+    { label: "Guichet de recuperation", value: supportCase.foundDeskName ?? supportCase.foundLocation ?? null },
+    { label: "Adresse du guichet", value: supportCase.foundDeskAddress ?? null },
+    { label: "Date limite de retrait", value: supportCase.pickupDeadlineAt ? formatDateTime(supportCase.pickupDeadlineAt) : null },
+  ].filter((item) => hasValue(item.value));
+  const technicalDetails = [
+    { label: "Notification client", value: supportCase.clientNotifiedAt ? `Envoyee le ${formatDateTime(supportCase.clientNotifiedAt)}` : null },
+    { label: "Choix final", value: supportCase.finalChoice ? finalChoiceLabels[supportCase.finalChoice] : null },
+    { label: "Satisfaction digitale", value: supportCase.digitalSupportRating ? `${supportCase.digitalSupportRating}/10` : null },
+    {
+      label: "Pass physique",
+      value: supportCase.passDestroyedAt
+        ? `Detruit le ${formatDateTime(supportCase.passDestroyedAt)}`
+        : supportCase.physicalPassReactivatedAt
+          ? `Reactive le ${formatDateTime(supportCase.physicalPassReactivatedAt)}`
+          : null,
+    },
+    { label: "Correspondance", value: supportCase.possibleMatch ?? null },
+  ].filter((item) => hasValue(item.value));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-idfm-anthracite/50 px-4 py-8" role="dialog" aria-modal="true">
-      <section className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-md bg-white shadow-2xl">
+      <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-md bg-white shadow-2xl">
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-neutral-light bg-white p-5">
           <div>
             <p className="text-xs font-bold uppercase text-idfm-interaction">{supportCase.dossierNumber}</p>
             <h2 className="mt-1 text-2xl font-bold text-idfm-anthracite">{personName(supportCase.member)}</h2>
-            <p className="mt-1 text-sm text-neutral-medium">
-              {supportCase.household?.customerNumber ?? "Dossier non rattache"} - {supportCase.passNumberMasked ?? "Pass non renseigne"}
-            </p>
+            <p className="mt-1 text-sm text-neutral-medium">Vue agent simplifiee du dossier SOS Navigo</p>
           </div>
           <Button type="button" variant="secondary" onClick={onClose}>
             Fermer
           </Button>
         </header>
 
-        <div className="grid gap-6 p-5 lg:grid-cols-[1fr_320px]">
-          <div className="grid gap-5">
+        <div className="grid gap-5 p-5 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-4">
             <section className="rounded-md border border-neutral-light p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="font-bold text-idfm-anthracite">Informations dossier</h3>
+                <h3 className="font-bold text-idfm-anthracite">Essentiel du dossier</h3>
                 <div className="flex flex-wrap gap-2">
                   {isPickupLate ? <Badge tone="red">En retard</Badge> : null}
                   <Badge tone={supportCaseStatusTones[supportCase.status]}>{supportCaseStatusLabels[supportCase.status]}</Badge>
                 </div>
               </div>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Foyer</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.household?.name ?? "Non rattache"}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Gestionnaire</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.household?.ownerName ?? "Non rattache"}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Titre</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.member?.currentTitle?.productName ?? "Non renseigne"}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Resolution initiale</dt>
-                  <dd className="mt-1 text-idfm-anthracite">
-                    {supportCase.chosenResolution ? resolutionLabels[supportCase.chosenResolution] : "Non renseignee"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Guichet</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.foundDeskName ?? supportCase.foundLocation ?? "Non renseigne"}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Adresse</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.foundDeskAddress ?? "Non renseignee"}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Date limite de retrait</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{formatDateTime(supportCase.pickupDeadlineAt)}</dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Notification client</dt>
-                  <dd className="mt-1 text-idfm-anthracite">
-                    {supportCase.clientNotifiedAt ? `Envoyee le ${formatDateTime(supportCase.clientNotifiedAt)}` : "Non envoyee"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Choix final</dt>
-                  <dd className="mt-1 text-idfm-anthracite">
-                    {supportCase.finalChoice ? finalChoiceLabels[supportCase.finalChoice] : "Non renseigne"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Satisfaction digital</dt>
-                  <dd className="mt-1 text-idfm-anthracite">
-                    {supportCase.digitalSupportRating ? `${supportCase.digitalSupportRating}/10` : "Non renseignee"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Pass physique</dt>
-                  <dd className="mt-1 text-idfm-anthracite">
-                    {supportCase.passDestroyedAt
-                      ? `Detruit le ${formatDateTime(supportCase.passDestroyedAt)}`
-                      : supportCase.physicalPassReactivatedAt
-                        ? `Reactive le ${formatDateTime(supportCase.physicalPassReactivatedAt)}`
-                        : "En attente"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-semibold text-neutral-medium">Correspondance</dt>
-                  <dd className="mt-1 text-idfm-anthracite">{supportCase.possibleMatch ?? "Aucune correspondance rattachee"}</dd>
-                </div>
+                {primaryDetails.map((item) => (
+                  <div key={item.label}>
+                    <dt className="font-semibold text-neutral-medium">{item.label}</dt>
+                    <dd className="mt-1 text-idfm-anthracite">{item.value}</dd>
+                  </div>
+                ))}
               </dl>
             </section>
+
+            {pickupDetails.length ? (
+              <section className="rounded-md border border-neutral-light p-4">
+                <h3 className="font-bold text-idfm-anthracite">Recuperation au guichet</h3>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  {pickupDetails.map((item) => (
+                    <div key={item.label}>
+                      <dt className="font-semibold text-neutral-medium">{item.label}</dt>
+                      <dd className="mt-1 text-idfm-anthracite">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ) : null}
 
             <section className="rounded-md border border-neutral-light p-4">
               <h3 className="font-bold text-idfm-anthracite">Actions agent</h3>
@@ -294,6 +279,22 @@ function CaseModal({
                 ) : null}
               </div>
             </section>
+
+            {technicalDetails.length ? (
+              <details className="rounded-md border border-neutral-light p-4">
+                <summary className="cursor-pointer text-sm font-bold text-idfm-anthracite">
+                  Voir plus
+                </summary>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  {technicalDetails.map((item) => (
+                    <div key={item.label}>
+                      <dt className="font-semibold text-neutral-medium">{item.label}</dt>
+                      <dd className="mt-1 text-idfm-anthracite">{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            ) : null}
           </div>
 
           <aside className="rounded-md border border-neutral-light p-4">
@@ -462,7 +463,7 @@ export default function AdminSosNavigoPage() {
 
         {message ? <InfoBox tone={message.tone}>{message.text}</InfoBox> : null}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <KpiCard label="Dossiers actifs" value={stats?.activeCases ?? 0} helper="Pertes non cloturees" tone="orange" />
           <KpiCard label="Pass retrouves" value={stats?.foundTodayCount ?? 0} helper="Signales aujourd'hui" tone="green" />
           <KpiCard label="Attente guichet" value={stats?.waitingPickupCount ?? 0} helper="Clients a recuperer" tone="blue" />
@@ -470,67 +471,107 @@ export default function AdminSosNavigoPage() {
           <KpiCard label="Satisfaction digital" value={stats?.digitalSupportSatisfaction ? `${stats.digitalSupportSatisfaction}/10` : "-"} helper="Note moyenne client" tone="blue" />
         </section>
 
-        <section className="grid gap-4 rounded-md border border-neutral-light bg-white p-4 shadow-sm lg:grid-cols-[1fr_360px]">
-          <div>
-            <label className="text-sm font-bold text-idfm-anthracite" htmlFor="sos-search">
-              Recherche dossier, client, profil, numero Navigo
-            </label>
-            <input
-              id="sos-search"
-              className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Sophie, Lucas, SOS-2026, CF-..., 0 660 654 567 R"
-            />
-            <div className="mt-4 flex flex-wrap gap-2">
-              {(Object.keys(filterLabels) as AdminSosFilter[]).map((candidate) => (
-                <button
-                  key={candidate}
-                  type="button"
-                  className={`min-h-10 rounded-md border px-3 text-sm font-semibold transition ${
-                    filter === candidate
-                      ? "border-idfm-interaction bg-idfm-interaction text-white"
-                      : "border-neutral-light bg-white text-idfm-anthracite hover:bg-idfm-light"
-                  }`}
-                  onClick={() => setFilter(candidate)}
-                >
-                  {filterLabels[candidate]}
-                </button>
-              ))}
+        <section className="rounded-2xl border border-idfm-medium bg-idfm-light p-5 shadow-sm">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(24rem,1fr)] lg:items-start">
+            <div className="self-start rounded-2xl bg-white/60 p-4 lg:min-h-0">
+              <p className="text-sm font-bold uppercase tracking-wide text-idfm-interaction">Action prioritaire</p>
+              <h2 className="mt-2 text-2xl font-bold text-idfm-anthracite">Enregistrer un pass retrouve</h2>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-neutral-medium">
+                Rattachez un pass retrouve a un dossier SOS ou creez un dossier si besoin.
+              </p>
+            </div>
+
+            <form className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm" onSubmit={handleFoundPassSubmit}>
+              <label className="block text-sm font-semibold text-neutral-medium" htmlFor="found-pass-number">
+                Numero Navigo complet
+              </label>
+              <input
+                id="found-pass-number"
+                className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
+                value={passNumber}
+                onChange={(event) => setPassNumber(event.target.value)}
+                placeholder="0 660 654 567 R"
+                required
+              />
+              <label className="mt-4 block text-sm font-semibold text-neutral-medium" htmlFor="found-desk">
+                Guichet
+              </label>
+              <select
+                id="found-desk"
+                className="mt-2 min-h-12 w-full rounded-md border border-neutral-light bg-white px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
+                value={deskName}
+                onChange={(event) => setDeskName(event.target.value)}
+              >
+                <option value="">Choix automatique</option>
+                {dashboard?.desks.map((desk) => (
+                  <option key={desk.name} value={desk.name}>{desk.name}</option>
+                ))}
+              </select>
+              <Button type="submit" className="mt-5 w-full" disabled={isBusy}>
+                Enregistrer le pass
+              </Button>
+            </form>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-idfm-interaction">Filtrer les dossiers</p>
+              <h2 className="mt-1 text-xl font-bold text-idfm-anthracite">Recherche et vues de travail</h2>
+            </div>
+            <Badge tone="blue">{cases.length} dossiers</Badge>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-end">
+            <div>
+              <label className="text-sm font-bold text-idfm-anthracite" htmlFor="sos-search">
+                Recherche dossier, client, profil, numero Navigo
+              </label>
+              <input
+                id="sos-search"
+                className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Sophie, Lucas, SOS-2026, CF-..., 0 660 654 567 R"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-idfm-anthracite" htmlFor="sos-filter">
+                Vue
+              </label>
+              <select
+                id="sos-filter"
+                className="mt-2 min-h-12 w-full rounded-md border border-neutral-light bg-white px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as AdminSosFilter)}
+              >
+                {(Object.keys(filterLabels) as AdminSosFilter[]).map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {filterLabels[candidate]}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <form className="rounded-md border border-neutral-light bg-neutral-xlight p-4" onSubmit={handleFoundPassSubmit}>
-            <h2 className="font-bold text-idfm-anthracite">Enregistrer un pass retrouve</h2>
-            <label className="mt-4 block text-sm font-semibold text-neutral-medium" htmlFor="found-pass-number">
-              Numero Navigo complet
-            </label>
-            <input
-              id="found-pass-number"
-              className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
-              value={passNumber}
-              onChange={(event) => setPassNumber(event.target.value)}
-              placeholder="0 660 654 567 R"
-              required
-            />
-            <label className="mt-4 block text-sm font-semibold text-neutral-medium" htmlFor="found-desk">
-              Guichet
-            </label>
-            <select
-              id="found-desk"
-              className="mt-2 min-h-12 w-full rounded-md border border-neutral-light bg-white px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
-              value={deskName}
-              onChange={(event) => setDeskName(event.target.value)}
-            >
-              <option value="">Choix automatique</option>
-              {dashboard?.desks.map((desk) => (
-                <option key={desk.name} value={desk.name}>{desk.name}</option>
-              ))}
-            </select>
-            <Button type="submit" className="mt-4 w-full" disabled={isBusy}>
-              Enregistrer
-            </Button>
-          </form>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(["all", "active", "waiting-pickup", "found", "closed"] as AdminSosFilter[]).map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                className={`min-h-10 rounded-full border px-4 text-sm font-semibold transition ${
+                  filter === candidate
+                    ? "border-idfm-interaction bg-idfm-interaction text-white"
+                    : "border-neutral-light bg-neutral-xlight text-idfm-anthracite hover:bg-idfm-light"
+                }`}
+                onClick={() => setFilter(candidate)}
+              >
+                {filterLabels[candidate]}
+              </button>
+            ))}
+          </div>
         </section>
 
         <section className="rounded-md border border-neutral-light bg-white shadow-sm">
@@ -543,12 +584,12 @@ export default function AdminSosNavigoPage() {
             <div className="p-4"><InfoBox>Chargement des dossiers SOS Navigo...</InfoBox></div>
           ) : cases.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
                 <thead className="bg-neutral-xlight text-xs uppercase text-neutral-medium">
                   <tr>
                     <th className="px-4 py-3">Dossier</th>
                     <th className="px-4 py-3">Client / profil</th>
-                    <th className="px-4 py-3">Pass</th>
+                    <th className="w-44 px-4 py-3">Pass</th>
                     <th className="px-4 py-3">Statut</th>
                     <th className="px-4 py-3">Guichet</th>
                     <th className="px-4 py-3">Creation</th>
@@ -563,7 +604,7 @@ export default function AdminSosNavigoPage() {
                         <p className="font-semibold text-idfm-anthracite">{personName(supportCase.member)}</p>
                         <p className="mt-1 text-xs text-neutral-medium">{supportCase.household?.customerNumber ?? "Non rattache"}</p>
                       </td>
-                      <td className="px-4 py-4 font-mono text-idfm-anthracite">{supportCase.passNumberMasked ?? "numero indisponible"}</td>
+                      <td className="w-44 px-4 py-4 font-mono text-idfm-anthracite whitespace-nowrap">{supportCase.passNumberMasked ?? "numero indisponible"}</td>
                       <td className="px-4 py-4">
                         <Badge tone={supportCaseStatusTones[supportCase.status]}>{supportCaseStatusLabels[supportCase.status]}</Badge>
                       </td>

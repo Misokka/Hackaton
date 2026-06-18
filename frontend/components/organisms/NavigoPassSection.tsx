@@ -132,7 +132,7 @@ export function NavigoPassSection({ pass, memberName, onSwitchSupport }: NavigoP
                 <p className="mt-6 text-xs font-bold uppercase tracking-wide text-neutral-medium">Titulaire</p>
                 <p className="text-lg font-bold text-idfm-anthracite">{currentPass.holderName}</p>
                 <p className="mt-4 text-xs font-bold uppercase tracking-wide text-neutral-medium">Identifiant</p>
-                <p className="font-semibold text-idfm-anthracite">{currentPass.navigoNumberMasked}</p>
+                <p className="font-semibold text-idfm-anthracite whitespace-nowrap">{currentPass.navigoNumberMasked}</p>
               </div>
               <div className="grid grid-cols-[1fr_auto] items-end gap-3">
                 <div>
@@ -158,7 +158,7 @@ export function NavigoPassSection({ pass, memberName, onSwitchSupport }: NavigoP
               <p className="text-sm font-bold uppercase tracking-wide text-neutral-medium">Titulaire</p>
               <p className="text-xl font-bold text-idfm-anthracite">{currentPass.holderName}</p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,1.2fr)]">
               <div>
                 <p className="text-sm font-bold uppercase tracking-wide text-neutral-medium">Titre associé</p>
                 <p className="font-semibold text-idfm-anthracite">{currentPass.productName}</p>
