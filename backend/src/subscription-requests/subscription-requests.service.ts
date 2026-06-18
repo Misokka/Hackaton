@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { DocumentType, SubscriptionRequestStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, unlink, writeFile } from "fs/promises";
 import { extname, join } from "path";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request.dto";
@@ -796,6 +796,59 @@ export class SubscriptionRequestsService {
       simulatedMimeType: updated.simulatedMimeType,
       simulatedSizeBytes: updated.simulatedSizeBytes,
       hasStoredFile: Boolean(updated.storedFilePath),
+      uploadedAt: this.formatDate(updated.uploadedAt),
+    };
+  }
+
+  async deleteImagineRDocumentFileForUser(userId: string, id: string, documentType: string) {
+    const existing = await this.prismaService.subscriptionRequest.findFirst({
+      where: {
+        id,
+        flowType: "IMAGINE_R",
+        household: { ownerId: userId },
+      },
+      include: {
+        documents: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande imagine R introuvable.");
+    }
+
+    const document = existing.documents.find((candidate) => candidate.documentType === documentType);
+
+    if (!document) {
+      throw new NotFoundException("Justificatif introuvable.");
+    }
+
+    if (document.storedFilePath && !document.storedFilePath.includes("/") && !document.storedFilePath.includes("\\")) {
+      await unlink(join(this.documentUploadDirectory, document.storedFilePath)).catch(() => undefined);
+    }
+
+    const updated = await this.prismaService.subscriptionDocument.update({
+      where: { id: document.id },
+      data: {
+        status: "MISSING",
+        rejectionReason: null,
+        simulatedFileName: null,
+        simulatedMimeType: null,
+        simulatedSizeBytes: null,
+        simulatedPreviewDataUrl: null,
+        storedFilePath: null,
+        uploadedAt: null,
+      },
+    });
+
+    return {
+      id: updated.id,
+      documentType: updated.documentType,
+      label: updated.label,
+      status: updated.status,
+      simulatedFileName: updated.simulatedFileName,
+      simulatedMimeType: updated.simulatedMimeType,
+      simulatedSizeBytes: updated.simulatedSizeBytes,
+      hasStoredFile: false,
       uploadedAt: this.formatDate(updated.uploadedAt),
     };
   }
