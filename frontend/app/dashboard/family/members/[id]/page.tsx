@@ -165,7 +165,7 @@ export default function MemberDetailPage() {
       title={`${detail.member.firstName} ${detail.member.lastName}`}
       userName={detail.manager.firstName ?? "Mon espace"}
     >
-      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
         <div className="grid gap-6">
           {flash ? <InfoBox tone={flash.tone}>{flash.message}</InfoBox> : null}
 
@@ -208,8 +208,8 @@ export default function MemberDetailPage() {
           </section>
         </div>
 
-        <div className="grid gap-6">
-          <section className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+        <div className="grid gap-6 self-start lg:content-start">
+          <section className="h-fit rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold text-idfm-anthracite">Actions utiles</h2>
             <div className="mt-5 grid gap-3">
               <Link href={memberTitleAction.primaryHref} className="contents">
@@ -254,7 +254,7 @@ export default function MemberDetailPage() {
             <InfoBox>{detail.accessibilityNote}</InfoBox>
           ) : null}
 
-          <section id="eligibilite" className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+          <section id="eligibilite" className="h-fit rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold text-idfm-anthracite">Alertes du profil</h2>
             <div className="mt-4 grid gap-3">
               {detail.alerts.map((alert) => (
