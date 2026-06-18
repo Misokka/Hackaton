@@ -118,6 +118,22 @@ export type SubscriptionRequestStatus =
   | "BLOCKED"
   | "CANCELLED";
 
+export type SubscriptionRenewalType = "ANNUAL" | "MONTHLY";
+export type SubscriptionRenewalStatus = "ACTIVE" | "DISABLED" | "CANCELLED" | "EXPIRED";
+
+export type SubscriptionRenewal = {
+  enabled: boolean;
+  type: SubscriptionRenewalType | null;
+  status: SubscriptionRenewalStatus;
+  months: number | null;
+  monthsRemaining: number | null;
+  nextDate: string | null;
+  activatedAt: string | null;
+  cancelledAt: string | null;
+  label: string;
+  canCancel: boolean;
+};
+
 export type DashboardPendingRequest = {
   id: string;
   requestNumber: string | null;
@@ -125,6 +141,7 @@ export type DashboardPendingRequest = {
   offerName: string;
   offerSlug: string;
   updatedAt: string;
+  renewal: SubscriptionRenewal;
 };
 
 export type DashboardMember = {
@@ -199,6 +216,7 @@ export type MemberDetailResponse = {
   household: HouseholdDashboardResponse["household"];
   manager: HouseholdDashboardResponse["manager"];
   member: DashboardMember;
+  navigoPass: NavigoPass | null;
   householdRole: string;
   overview: string;
   supportNote: string;
@@ -206,6 +224,30 @@ export type MemberDetailResponse = {
   documents: string[];
   actions: MemberDetailAction[];
   alerts: DashboardNotification[];
+};
+
+export type NavigoPassSupportType = "PHYSICAL" | "DIGITAL";
+
+export type NavigoPassStatus = "ACTIVE" | "IN_PROGRESS" | "DISABLED";
+
+export type NavigoPassSwitchHistory = {
+  id: string;
+  previousSupport: NavigoPassSupportType;
+  newSupport: NavigoPassSupportType;
+  createdAt: string;
+};
+
+export type NavigoPass = {
+  id: string;
+  holderName: string;
+  navigoNumberMasked: string;
+  productName: string;
+  supportType: NavigoPassSupportType;
+  status: NavigoPassStatus;
+  monthlySwitchLimit: number;
+  switchesUsedThisMonth: number;
+  switchesRemainingThisMonth: number;
+  history: NavigoPassSwitchHistory[];
 };
 
 export type LostPassReason = "LOST" | "STOLEN" | "DAMAGED" | "UNKNOWN";
@@ -386,6 +428,7 @@ export type CreateSubscriptionRequestPayload = {
   payerMemberId?: string;
   intelligentDossierEnabled: boolean;
   autoRenewalEnabled: boolean;
+  renewalMonths?: number;
 };
 
 export type ImagineRAddressPayload = {
@@ -440,6 +483,7 @@ export type SubscriptionRequestResponse = {
   flowType: SubscriptionRequestFlow;
   status: SubscriptionRequestStatus;
   autoRenewalEnabled: boolean;
+  renewal: SubscriptionRenewal;
   intelligentDossierEnabled: boolean;
   createdAt: string;
   updatedAt: string;

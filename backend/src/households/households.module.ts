@@ -3,12 +3,14 @@ import { JwtModule } from "@nestjs/jwt";
 import { PrismaModule } from "src/prisma/prisma.module";
 import { JWT_SECRET } from "src/auth/auth.constants";
 import { JwtAuthGuard } from "src/auth/guards/jwt-auth.guard";
+import { NavigoPassesModule } from "src/navigo-passes/navigo-passes.module";
 import { HouseholdsController } from "./households.controller";
 import { HouseholdsService } from "./households.service";
 
 @Module({
   imports: [
     PrismaModule,
+    NavigoPassesModule,
     JwtModule.register({
       secret: JWT_SECRET,
       signOptions: { expiresIn: "7d" },

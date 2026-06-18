@@ -4,18 +4,57 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Badge } from "@/components/atoms/Badge";
+import { Button } from "@/components/atoms/Button";
 import { InfoBox } from "@/components/molecules/InfoBox";
 import { RequiredDocumentList } from "@/components/molecules/RequiredDocumentList";
 import { SubscriptionConfirmationTimeline } from "@/components/molecules/SubscriptionConfirmationTimeline";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
-import { getSubscriptionRequest } from "@/lib/api/subscriptions";
+import { cancelSubscriptionRenewal, getSubscriptionRequest } from "@/lib/api/subscriptions";
 import type { SubscriptionRequestResponse } from "@/lib/api/types";
+import { getSubscriptionRequestStatusLabel } from "@/lib/subscription-status";
+
+const monthLabels = [
+  "",
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+const emptyRenewal = {
+  enabled: false,
+  type: null,
+  status: "DISABLED",
+  months: null,
+  monthsRemaining: null,
+  nextDate: null,
+  activatedAt: null,
+  cancelledAt: null,
+  label: "Aucun renouvellement automatique activé",
+  canCancel: false,
+} satisfies SubscriptionRequestResponse["renewal"];
+
+function formatMonthYear(value: string | null) {
+  if (!value) return "échéance à confirmer";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "échéance à confirmer";
+  return `${monthLabels[date.getMonth() + 1]} ${date.getFullYear()}`;
+}
 
 function SubscriptionConfirmationContent() {
   const params = useParams<{ id: string }>();
   const [request, setRequest] = useState<SubscriptionRequestResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCancellingRenewal, setIsCancellingRenewal] = useState(false);
 
   useEffect(() => {
     const accessToken = localStorage.getItem("familyAccessToken");
@@ -33,6 +72,31 @@ function SubscriptionConfirmationContent() {
   }, [params.id]);
 
   const userName = request?.payer.firstName ?? "Mon espace";
+  const statusLabel = request ? getSubscriptionRequestStatusLabel(request.status) : null;
+  const renewal = request?.renewal ?? emptyRenewal;
+
+  async function handleCancelRenewal() {
+    if (!request) return;
+    const accessToken = localStorage.getItem("familyAccessToken");
+
+    if (!accessToken) {
+      setMessage("Connectez-vous pour modifier le renouvellement.");
+      return;
+    }
+
+    setIsCancellingRenewal(true);
+    setMessage(null);
+
+    try {
+      const updated = await cancelSubscriptionRenewal(accessToken, request.id);
+      setRequest(updated);
+      setMessage("Le renouvellement automatique a bien été désactivé.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossible de modifier le renouvellement.");
+    } finally {
+      setIsCancellingRenewal(false);
+    }
+  }
 
   return (
     <DashboardLayout
@@ -44,7 +108,7 @@ function SubscriptionConfirmationContent() {
         { label: "Confirmation" },
       ]}
       subtitle="Votre demande est enregistree et suivie dans l'espace famille."
-      summaryItems={request ? [request.offer.name, request.status, `Porteur : ${request.member.firstName}`] : ["Suivi de demande"]}
+      summaryItems={request ? [request.offer.name, statusLabel ?? "En cours", `Porteur : ${request.member.firstName}`] : ["Suivi de demande"]}
       title="Demande envoyee"
       userName={userName}
     >
@@ -71,9 +135,53 @@ function SubscriptionConfirmationContent() {
               </div>
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-neutral-medium">Statut</p>
-                <p className="font-bold text-idfm-anthracite">{request.status}</p>
+                <p className="font-bold text-idfm-anthracite">{statusLabel}</p>
               </div>
             </div>
+          </section>
+
+          <section id="renewal" className="rounded-3xl border border-neutral-light bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={renewal.enabled ? "green" : "orange"}>
+                {renewal.enabled ? "Activé" : renewal.status === "CANCELLED" ? "Désactivé" : "Non activé"}
+              </Badge>
+              <Badge tone="blue">
+                {renewal.type === "MONTHLY"
+                  ? "Reconduction mensuelle"
+                  : renewal.type === "ANNUAL"
+                    ? "Renouvellement annuel"
+                    : "Option disponible"}
+              </Badge>
+            </div>
+            <h2 className="mt-4 text-2xl font-bold text-idfm-anthracite">Gérer le renouvellement</h2>
+            {renewal.enabled ? (
+              <>
+                <p className="mt-3 text-sm leading-6 text-neutral-medium">
+                  {renewal.label}. Prochaine échéance : {formatMonthYear(renewal.nextDate)}.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-neutral-medium">
+                  Votre titre actuel reste valable jusqu'à sa fin. Vous pouvez annuler avant la prochaine échéance.
+                </p>
+                {renewal.type === "ANNUAL" ? (
+                  <InfoBox className="mt-4">
+                    Certains justificatifs pourront être redemandés chaque année si votre situation l'exige, sans refaire tout le parcours.
+                  </InfoBox>
+                ) : null}
+                <div className="mt-5">
+                  <Button type="button" variant="secondary" onClick={handleCancelRenewal} disabled={isCancellingRenewal}>
+                    {isCancellingRenewal
+                      ? "Annulation..."
+                      : renewal.type === "MONTHLY"
+                        ? "Annuler la reconduction"
+                        : "Annuler le renouvellement automatique"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-neutral-medium">
+                {renewal.label}. Vous pourrez le réactiver plus tard depuis votre espace famille.
+              </p>
+            )}
           </section>
 
           <section className="grid gap-6 lg:grid-cols-[0.9fr_1fr]">

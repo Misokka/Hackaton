@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class CreateSubscriptionRequestDto {
   @IsString()
@@ -18,4 +18,10 @@ export class CreateSubscriptionRequestDto {
 
   @IsBoolean()
   autoRenewalEnabled: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  renewalMonths?: number;
 }

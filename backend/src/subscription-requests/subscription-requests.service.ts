@@ -57,6 +57,78 @@ export class SubscriptionRequestsService {
     return date ? new Date(date).toISOString() : null;
   }
 
+  private isMonthlyRenewalProduct(productType?: string | null) {
+    return productType === "NAVIGO_LIBERTE";
+  }
+
+  private getNextMonthlyRenewalDate() {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  private buildRenewalUpdate(
+    enabled: boolean,
+    productType?: string | null,
+    nextDate?: Date | null,
+    months?: number | null,
+  ) {
+    if (!enabled) {
+      return {
+        autoRenewalEnabled: false,
+        renewalType: null,
+        renewalStatus: "DISABLED" as const,
+        renewalMonths: null,
+        renewalMonthsRemaining: null,
+        renewalNextDate: null,
+        renewalActivatedAt: null,
+        renewalCancelledAt: null,
+      };
+    }
+
+    const isMonthly = this.isMonthlyRenewalProduct(productType);
+    const renewalMonths = isMonthly ? Math.min(Math.max(months ?? 1, 1), 12) : null;
+
+    return {
+      autoRenewalEnabled: true,
+      renewalType: isMonthly ? ("MONTHLY" as const) : ("ANNUAL" as const),
+      renewalStatus: "ACTIVE" as const,
+      renewalMonths,
+      renewalMonthsRemaining: renewalMonths,
+      renewalNextDate: isMonthly ? this.getNextMonthlyRenewalDate() : (nextDate ?? null),
+      renewalActivatedAt: new Date(),
+      renewalCancelledAt: null,
+    };
+  }
+
+  private formatRenewal(request: any) {
+    const enabled = Boolean(request.autoRenewalEnabled && request.renewalStatus === "ACTIVE");
+    const type = request.renewalType ?? null;
+    const status = request.renewalStatus ?? (enabled ? "ACTIVE" : "DISABLED");
+    const monthsRemaining = request.renewalMonthsRemaining ?? null;
+
+    return {
+      enabled,
+      type,
+      status,
+      months: request.renewalMonths ?? null,
+      monthsRemaining,
+      nextDate: this.formatDate(request.renewalNextDate),
+      activatedAt: this.formatDate(request.renewalActivatedAt),
+      cancelledAt: this.formatDate(request.renewalCancelledAt),
+      label: enabled
+        ? type === "MONTHLY"
+          ? `Reconduction active${monthsRemaining ? ` : ${monthsRemaining} mois restants` : ""}`
+          : "Renouvellement automatique activé"
+        : status === "CANCELLED"
+          ? "Renouvellement désactivé"
+          : "Aucun renouvellement automatique activé",
+      canCancel: enabled,
+    };
+  }
+
   private formatRequest(request: any) {
     const addresses = Object.fromEntries(
       (request.addresses ?? []).map((address: any) => [
@@ -80,6 +152,7 @@ export class SubscriptionRequestsService {
       flowType: request.flowType,
       status: request.status,
       autoRenewalEnabled: request.autoRenewalEnabled,
+      renewal: this.formatRenewal(request),
       intelligentDossierEnabled: request.intelligentDossierEnabled,
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
@@ -255,7 +328,7 @@ export class SubscriptionRequestsService {
           payerMemberId: payer.id,
           offerId: offer.id,
           status: "WAITING_DOCUMENTS",
-          autoRenewalEnabled: data.autoRenewalEnabled,
+          ...this.buildRenewalUpdate(data.autoRenewalEnabled, offer.productType, null, data.renewalMonths),
           intelligentDossierEnabled: data.intelligentDossierEnabled,
           documents: {
             create: offer.requiredDocuments.map((document) => ({
@@ -335,6 +408,7 @@ export class SubscriptionRequestsService {
         status: "DRAFT",
         intelligentDossierEnabled: true,
         autoRenewalEnabled: false,
+        renewalStatus: "DISABLED",
         deliveryMode: "PAYER_HOME",
         scholarshipStatus: "UNKNOWN",
         holderAddressSameAsPayer: true,
@@ -377,7 +451,7 @@ export class SubscriptionRequestsService {
         flowType: "IMAGINE_R",
         household: { ownerId: userId },
       },
-      include: { documents: true },
+      include: { documents: true, offer: true },
     });
 
     if (!existing) {
@@ -408,7 +482,13 @@ export class SubscriptionRequestsService {
           ...(typeof data.schoolName === "string" ? { schoolName: data.schoolName || null } : {}),
           ...(data.imagineRSchoolLevel ? { imagineRSchoolLevel: data.imagineRSchoolLevel } : {}),
           ...(data.scholarshipStatus ? { scholarshipStatus: data.scholarshipStatus } : {}),
-          ...(typeof data.autoRenewalEnabled === "boolean" ? { autoRenewalEnabled: data.autoRenewalEnabled } : {}),
+          ...(typeof data.autoRenewalEnabled === "boolean"
+            ? this.buildRenewalUpdate(
+                data.autoRenewalEnabled,
+                existing.offer.productType,
+                existing.validityEndDate ?? this.defaultImagineRDates().validityEndDate,
+              )
+            : {}),
           ...(typeof data.intelligentDossierEnabled === "boolean"
             ? { intelligentDossierEnabled: data.intelligentDossierEnabled }
             : {}),
@@ -579,6 +659,7 @@ export class SubscriptionRequestsService {
         id,
         household: { ownerId: userId },
       },
+      include: { offer: true },
     });
 
     if (!existing) {
@@ -588,11 +669,35 @@ export class SubscriptionRequestsService {
     const updated = await this.prismaService.subscriptionRequest.update({
       where: { id },
       data: {
-        ...(typeof data.autoRenewalEnabled === "boolean" ? { autoRenewalEnabled: data.autoRenewalEnabled } : {}),
+        ...(typeof data.autoRenewalEnabled === "boolean"
+          ? this.buildRenewalUpdate(data.autoRenewalEnabled, existing.offer.productType, null, data.renewalMonths)
+          : {}),
         ...(typeof data.intelligentDossierEnabled === "boolean"
           ? { intelligentDossierEnabled: data.intelligentDossierEnabled }
           : {}),
         ...(data.status ? { status: data.status } : {}),
+      },
+      include: this.requestInclude,
+    });
+
+    return this.formatRequest(updated);
+  }
+
+  async cancelRenewalForUser(userId: string, id: string) {
+    const existing = await this.prismaService.subscriptionRequest.findFirst({
+      where: { id, household: { ownerId: userId } },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const updated = await this.prismaService.subscriptionRequest.update({
+      where: { id },
+      data: {
+        autoRenewalEnabled: false,
+        renewalStatus: "CANCELLED",
+        renewalCancelledAt: new Date(),
       },
       include: this.requestInclude,
     });

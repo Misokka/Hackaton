@@ -36,7 +36,10 @@ export const titleOffersMock: ProductOffer[] = [
     minAge: null,
     maxAge: 10,
     benefits: [{ id: "benefit-junior-1", label: "Adapté aux moins de 11 ans" }],
-    requiredDocuments: [{ id: "doc-junior-1", documentType: "PHOTO", label: "Photo récente", required: true }],
+    requiredDocuments: [
+      { id: "doc-junior-1", documentType: "PHOTO", label: "Photo récente", required: true },
+      { id: "doc-junior-2", documentType: "ID_DOCUMENT", label: "Justificatif d'identité", required: true },
+    ],
   },
   {
     id: "offer-scolaire",
@@ -54,6 +57,7 @@ export const titleOffersMock: ProductOffer[] = [
     requiredDocuments: [
       { id: "doc-scolaire-1", documentType: "PHOTO", label: "Photo récente", required: true },
       { id: "doc-scolaire-2", documentType: "SCHOOL_CERTIFICATE", label: "Certificat scolaire", required: true },
+      { id: "doc-scolaire-3", documentType: "ID_DOCUMENT", label: "Justificatif d'identité", required: true },
     ],
   },
   {

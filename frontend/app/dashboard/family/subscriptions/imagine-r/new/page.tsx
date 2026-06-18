@@ -33,6 +33,7 @@ import type {
 } from "@/lib/api/types";
 import { familyDashboardMock } from "@/lib/demo/familyDashboardMock";
 import { titleOffersMock } from "@/lib/demo/titleOffersMock";
+import { getSubscriptionRequestStatusLabel } from "@/lib/subscription-status";
 
 const steps = [
   "Profil",
@@ -67,6 +68,7 @@ const emptyAddress: ImagineRAddressPayload = {
 };
 
 const AGE_REFERENCE_DATE = new Date("2026-06-17T12:00:00.000Z");
+const PAYER_INFO_STORAGE_KEY = "imagineRPayerInfo";
 
 type FormState = {
   hasPreviousImagineR: boolean | null;
@@ -83,6 +85,7 @@ type FormState = {
   scholarshipStatus: ImagineRScholarshipStatus;
   photoFile: { name: string; type: string; size: number } | null;
   identityFile: { name: string; type: string; size: number } | null;
+  autoRenewalEnabled: boolean;
   signatureInformationAccepted: boolean;
   signaturePayerAccepted: boolean;
   signatureTermsAccepted: boolean;
@@ -114,6 +117,35 @@ function centsToEuro(value: number | null | undefined) {
 function toDateInputValue(date: string | null) {
   if (!date) return "";
   return date.slice(0, 10);
+}
+
+function hasAddressValue(address: ImagineRAddressPayload) {
+  return Boolean(address.street || address.postalCode || address.city);
+}
+
+function readStoredPayerInfo() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const stored = localStorage.getItem(PAYER_INFO_STORAGE_KEY);
+    return stored
+      ? (JSON.parse(stored) as { payerBirthDate?: string; payerAddress?: ImagineRAddressPayload })
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function storePayerInfo(payerBirthDate: string, payerAddress: ImagineRAddressPayload) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(
+    PAYER_INFO_STORAGE_KEY,
+    JSON.stringify({
+      payerBirthDate,
+      payerAddress,
+    }),
+  );
 }
 
 function SectionCard({ children, title }: { children: ReactNode; title: string }) {
@@ -231,6 +263,7 @@ function ImagineRSubscriptionContent() {
     scholarshipStatus: "UNKNOWN",
     photoFile: null,
     identityFile: null,
+    autoRenewalEnabled: false,
     signatureInformationAccepted: false,
     signaturePayerAccepted: false,
     signatureTermsAccepted: false,
@@ -271,6 +304,7 @@ function ImagineRSubscriptionContent() {
               schoolName: request.imagineR?.schoolName ?? "",
               schoolLevel: request.imagineR?.schoolLevel ?? current.schoolLevel,
               scholarshipStatus: request.imagineR?.scholarshipStatus ?? "UNKNOWN",
+              autoRenewalEnabled: request.renewal?.enabled ?? request.autoRenewalEnabled ?? false,
               signatureInformationAccepted: request.imagineR?.signatureInformationAccepted ?? false,
               signaturePayerAccepted: request.imagineR?.signaturePayerAccepted ?? false,
               signatureTermsAccepted: request.imagineR?.signatureTermsAccepted ?? false,
@@ -284,9 +318,14 @@ function ImagineRSubscriptionContent() {
         const offer = offersResponse.find((candidate) => candidate.id === searchParams.get("offerId")) ?? defaultOfferForMember(member, offersResponse);
         setSelectedMemberId((current) => current ?? memberId);
         setSelectedOfferId((current) => current ?? offer?.id ?? null);
+        const storedPayerInfo = readStoredPayerInfo();
         setForm((current) => ({
           ...current,
           schoolLevel: member?.schoolLevel ?? current.schoolLevel,
+          payerBirthDate: current.payerBirthDate || storedPayerInfo?.payerBirthDate || "",
+          payerAddress: hasAddressValue(current.payerAddress)
+            ? current.payerAddress
+            : storedPayerInfo?.payerAddress ?? current.payerAddress,
         }));
       } catch (error) {
         setDashboard(familyDashboardMock);
@@ -389,6 +428,7 @@ function ImagineRSubscriptionContent() {
           payerBirthDate: form.payerBirthDate || undefined,
           addresses: [{ ...form.payerAddress, type: "PAYER" }],
         });
+        storePayerInfo(form.payerBirthDate, form.payerAddress);
       }
       if (step === 6) {
         if (!form.schoolZipOrCity || !form.schoolName) throw new Error("Renseignez l'établissement scolaire.");
@@ -398,6 +438,7 @@ function ImagineRSubscriptionContent() {
           schoolName: form.schoolName,
           imagineRSchoolLevel: form.schoolLevel,
           scholarshipStatus: form.scholarshipStatus,
+          autoRenewalEnabled: form.autoRenewalEnabled,
           documents: [
             ...(form.photoFile
               ? [{
@@ -466,7 +507,7 @@ function ImagineRSubscriptionContent() {
       summaryItems={[
         selectedMember ? `${selectedMember.firstName}, ${age ?? "-"} ans` : "Enfant à choisir",
         selectedOffer?.name ?? "Offre imagine R",
-        draft?.status ?? "Brouillon",
+        draft ? getSubscriptionRequestStatusLabel(draft.status) : "Brouillon",
       ]}
       title="Souscription imagine R Scolaire ou Junior"
       userName={data.manager.firstName}
@@ -609,6 +650,31 @@ function ImagineRSubscriptionContent() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-idfm-medium bg-idfm-light p-5">
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="blue">Optionnel</Badge>
+                  <Badge tone="orange">Annulable</Badge>
+                </div>
+                <h3 className="mt-4 text-xl font-bold text-idfm-anthracite">Renouvellement automatique</h3>
+                <p className="mt-2 text-sm leading-6 text-neutral-medium">
+                  Évitez l'oubli à la prochaine rentrée. Vous recevrez un rappel et vous gardez la main.
+                </p>
+                <div className="mt-4">
+                  <Checkbox
+                    checked={form.autoRenewalEnabled}
+                    label="Activer le renouvellement automatique"
+                    description="Prochain renouvellement estimé : septembre 2027."
+                    onChange={(event) => setFormValue("autoRenewalEnabled", event.target.checked)}
+                  />
+                </div>
+                {form.autoRenewalEnabled ? (
+                  <InfoBox className="mt-4">
+                    Vous pourrez annuler avant l'échéance. Des justificatifs pourront être redemandés si nécessaire,
+                    sans refaire toute la souscription.
+                  </InfoBox>
+                ) : null}
+              </div>
+
               <div>
                 <h3 className="text-xl font-bold text-idfm-anthracite">Établissement scolaire</h3>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -663,6 +729,7 @@ function ImagineRSubscriptionContent() {
                 ["Début", "1er septembre 2026"],
                 ["Récupération", "Au domicile du payeur"],
                 ["Établissement", form.schoolName || "À compléter"],
+                ["Renouvellement", form.autoRenewalEnabled ? "Activé — rappel avant septembre 2027" : "Non activé"],
                 ["Montant estimé", centsToEuro(draft?.imagineR?.totalAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 2520 : 40130))],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl bg-idfm-light p-4">
@@ -712,6 +779,11 @@ function ImagineRSubscriptionContent() {
             <p className="mt-4 text-base leading-7 text-neutral-medium">
               Votre dossier imagine R a bien été créé. Vous pouvez suivre son avancement depuis votre espace famille.
             </p>
+            <InfoBox className="mt-5">
+              {draft.renewal?.enabled
+                ? "Renouvellement automatique activé : vous recevrez un rappel avant la prochaine échéance et pourrez l'annuler depuis votre espace famille."
+                : "Aucun renouvellement automatique activé. Vous pourrez l'activer plus tard depuis votre espace famille."}
+            </InfoBox>
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-sm text-neutral-medium">Numéro de dossier</p>
@@ -723,7 +795,7 @@ function ImagineRSubscriptionContent() {
               </div>
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-sm text-neutral-medium">Statut</p>
-                <p className="font-bold text-idfm-anthracite">{draft.status}</p>
+                <p className="font-bold text-idfm-anthracite">{getSubscriptionRequestStatusLabel(draft.status)}</p>
               </div>
             </div>
             <div className="mt-6">

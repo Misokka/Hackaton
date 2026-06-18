@@ -9,6 +9,8 @@ import type {
   LostPassPayload,
   LostPassResponse,
   MemberDetailResponse,
+  NavigoPass,
+  NavigoPassSupportType,
   SupportCaseDetail,
   SupportCaseSummary,
   SupportCasesListResponse,
@@ -21,6 +23,27 @@ async function parseApiError(response: Response) {
     : data?.message ?? "Le service est momentanement indisponible.";
 
   return message;
+}
+
+export async function switchNavigoPassSupport(
+  accessToken: string,
+  memberId: string,
+  targetSupport: NavigoPassSupportType,
+): Promise<NavigoPass> {
+  const response = await fetch(buildApiUrl(`/api/navigo-passes/members/${memberId}/switch-support`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ targetSupport }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+
+  return response.json() as Promise<NavigoPass>;
 }
 
 export async function getMyHouseholdDashboard(accessToken: string): Promise<HouseholdDashboardResponse> {

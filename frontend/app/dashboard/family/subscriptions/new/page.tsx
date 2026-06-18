@@ -51,6 +51,7 @@ function SubscriptionNewContent() {
   const [payerMemberId, setPayerMemberId] = useState<string | null>(null);
   const [intelligentDossierEnabled, setIntelligentDossierEnabled] = useState(true);
   const [autoRenewalEnabled, setAutoRenewalEnabled] = useState(false);
+  const [renewalMonths, setRenewalMonths] = useState(3);
   const [step, setStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,6 +95,7 @@ function SubscriptionNewContent() {
     [offers, selectedMember, selectedOfferId],
   );
   const payerMember = data.members.find((member) => member.id === payerMemberId) ?? data.members.find((member) => member.id === data.manager.id);
+  const isMonthlyOffer = selectedOffer?.productType === "NAVIGO_LIBERTE";
 
   useEffect(() => {
     if (isLoading || !selectedMember || !selectedOffer || !isImagineROffer(selectedOffer)) {
@@ -130,6 +132,7 @@ function SubscriptionNewContent() {
         payerMemberId: payerMember?.id,
         intelligentDossierEnabled,
         autoRenewalEnabled,
+        renewalMonths: autoRenewalEnabled && isMonthlyOffer ? renewalMonths : undefined,
       });
       router.push(`/dashboard/family/subscriptions/${request.id}/confirmation`);
     } catch (error) {
@@ -262,10 +265,39 @@ function SubscriptionNewContent() {
               <div className="mt-4 grid gap-3">
                 <Checkbox
                   checked={autoRenewalEnabled}
-                  label="Prevoir le renouvellement automatique"
-                  description="Option de demo : aucun paiement reel n'est active."
+                  label={isMonthlyOffer ? "Activer la reconduction mensuelle" : "Activer le renouvellement automatique"}
+                  description={
+                    isMonthlyOffer
+                      ? "Votre titre sera reconduit pendant la durée choisie, sans paiement réel dans le MVP."
+                      : "Vous recevrez un rappel avant la prochaine échéance et pourrez annuler depuis votre espace."
+                  }
                   onChange={(event) => setAutoRenewalEnabled(event.target.checked)}
                 />
+                {autoRenewalEnabled && isMonthlyOffer ? (
+                  <label className="rounded-md border border-neutral-light bg-white p-4 text-xs font-bold uppercase tracking-wide text-neutral-medium">
+                    Durée de reconduction
+                    <select
+                      value={renewalMonths}
+                      onChange={(event) => setRenewalMonths(Number(event.target.value))}
+                      className="mt-2 min-h-12 w-full rounded-md border border-neutral-medium bg-white px-4 text-base normal-case text-idfm-anthracite focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium"
+                    >
+                      {[1, 2, 3, 6, 12].map((months) => (
+                        <option key={months} value={months}>
+                          {months} mois
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-2 block text-sm font-normal normal-case leading-6 text-neutral-medium">
+                      Reconduction annulable avant la prochaine échéance.
+                    </span>
+                  </label>
+                ) : null}
+                {autoRenewalEnabled && !isMonthlyOffer ? (
+                  <InfoBox>
+                    Annulable avant échéance. Des justificatifs pourront être redemandés si votre situation l'exige,
+                    sans refaire toute la souscription.
+                  </InfoBox>
+                ) : null}
                 <Checkbox
                   checked={intelligentDossierEnabled}
                   label="Conserver le dossier intelligent"

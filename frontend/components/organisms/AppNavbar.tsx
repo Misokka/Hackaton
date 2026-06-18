@@ -191,7 +191,7 @@ function CloseIcon() {
 export function AppNavbar({ userName }: AppNavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const headerRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -273,9 +273,9 @@ export function AppNavbar({ userName }: AppNavbarProps) {
   }
 
   return (
-    <header ref={headerRef} className="relative z-40 text-idfm-anthracite">
+    <>
       {/* Barre utilitaire */}
-      <div className="hidden border-b border-neutral-light bg-white px-5 py-2 lg:block">
+      <div className="relative z-30 hidden border-b border-neutral-light bg-white px-5 py-2 text-idfm-anthracite lg:block">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link
             href="/"
@@ -301,7 +301,7 @@ export function AppNavbar({ userName }: AppNavbarProps) {
       </div>
 
       {/* Barre principale */}
-      <div className="bg-idfm-anthracite px-5 text-white">
+      <div ref={headerRef} className="sticky top-0 z-50 bg-idfm-anthracite px-5 text-white">
         <div className="mx-auto flex max-w-7xl items-stretch justify-between gap-2">
           {/* Logo */}
           <Link
@@ -622,6 +622,6 @@ export function AppNavbar({ userName }: AppNavbarProps) {
           </div>
         )}
       </div>
-    </header>
+    </>
   );
 }
