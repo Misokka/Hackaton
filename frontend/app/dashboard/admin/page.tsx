@@ -56,6 +56,8 @@ const requestStatusLabels: Record<SubscriptionRequestStatus, string> = {
   WAITING_DOCUMENTS: "Documents attendus",
   UNDER_REVIEW: "En verification",
   PAYMENT_PENDING: "Paiement attendu",
+  PAYMENT_CONFIRMED: "Paiement confirme",
+  PAYMENT_CANCELLED: "Paiement annule",
   CONFIRMED: "Confirmee",
   ACTIVE: "Active",
   BLOCKED: "Bloquee",

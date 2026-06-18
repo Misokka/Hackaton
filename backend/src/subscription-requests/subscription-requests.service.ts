@@ -181,6 +181,9 @@ export class SubscriptionRequestsService {
       status: request.status,
       reviewedAt: this.formatDate(request.reviewedAt),
       rejectionReason: request.rejectionReason,
+      paymentConfirmedAt: this.formatDate(request.paymentConfirmedAt),
+      paymentCancelledAt: this.formatDate(request.paymentCancelledAt),
+      stripeCheckoutSessionId: request.stripeCheckoutSessionId,
       autoRenewalEnabled: request.autoRenewalEnabled,
       renewal: this.formatRenewal(request),
       intelligentDossierEnabled: request.intelligentDossierEnabled,
@@ -885,6 +888,9 @@ export class SubscriptionRequestsService {
       throw new BadRequestException("Les confirmations de signature sont nécessaires.");
     }
 
+    if (!existing.paymentConfirmedAt) {
+      throw new BadRequestException("Le paiement doit être confirmé avant l'envoi du dossier.");
+    }
     await this.ensureImagineRCanBeSubmitted(existing.memberId, existing.id);
 
     const updated = await this.prismaService.$transaction(async (tx) => {

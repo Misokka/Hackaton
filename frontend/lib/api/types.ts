@@ -125,6 +125,8 @@ export type SubscriptionRequestStatus =
   | "WAITING_DOCUMENTS"
   | "UNDER_REVIEW"
   | "PAYMENT_PENDING"
+  | "PAYMENT_CONFIRMED"
+  | "PAYMENT_CANCELLED"
   | "CONFIRMED"
   | "ACTIVE"
   | "BLOCKED"
@@ -538,6 +540,9 @@ export type SubscriptionRequestResponse = {
   status: SubscriptionRequestStatus;
   reviewedAt: string | null;
   rejectionReason: string | null;
+  paymentConfirmedAt: string | null;
+  paymentCancelledAt: string | null;
+  stripeCheckoutSessionId: string | null;
   autoRenewalEnabled: boolean;
   renewal: SubscriptionRenewal;
   intelligentDossierEnabled: boolean;

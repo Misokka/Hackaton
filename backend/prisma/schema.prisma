@@ -95,6 +95,8 @@ enum SubscriptionRequestStatus {
   WAITING_DOCUMENTS
   UNDER_REVIEW
   PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  PAYMENT_CANCELLED
   CONFIRMED
   ACTIVE
   BLOCKED
@@ -402,6 +404,10 @@ model SubscriptionRequest {
   signatureDocumentsAccepted  Boolean                   @default(false)
   signedAt                    DateTime?
   paymentSimulatedAt          DateTime?
+  paymentConfirmedAt          DateTime?
+  paymentCancelledAt          DateTime?
+  stripeCheckoutSessionId     String?
+  stripePaymentIntentId       String?
   submittedAt                 DateTime?
   reviewedAt                  DateTime?
   rejectionReason             String?
@@ -417,6 +423,7 @@ model SubscriptionRequest {
   @@index([flowType])
   @@index([status])
   @@index([renewalStatus])
+  @@index([stripeCheckoutSessionId])
 }
 
 model SubscriptionRequestAddress {

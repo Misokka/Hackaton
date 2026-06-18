@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
@@ -18,12 +20,12 @@ import {
   createImagineRSubscriptionDraft,
   deleteImagineRSubscriptionDocumentFile,
   getSubscriptionRequest,
-  submitImagineRSubscriptionDraft,
   updateImagineRSubscriptionDraft,
   uploadImagineRSubscriptionDocumentFile,
 } from "@/lib/api/subscriptions";
 import type { ImagineRDocumentType } from "@/lib/api/subscriptions";
 import { getTitleOffers } from "@/lib/api/titles";
+import { confirmStripePaymentIntent, createStripePaymentIntent } from "@/lib/api/payments";
 import type {
   DashboardMember,
   HouseholdDashboardResponse,
@@ -106,6 +108,9 @@ type SavedProgress = {
 };
 
 const PROGRESS_STORAGE_PREFIX = "imagineRSubscriptionProgress:";
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_KEY
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_KEY)
+  : null;
 
 function getRequestProgressKey(requestId: string) {
   return `${PROGRESS_STORAGE_PREFIX}request:${requestId}`;
@@ -341,6 +346,159 @@ function UploadBox({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+function StripePaymentForm({
+  accessToken,
+  paymentIntentId,
+  requestId,
+  onPaid,
+}: {
+  accessToken: string;
+  paymentIntentId: string;
+  requestId: string;
+  onPaid: (request: SubscriptionRequestResponse) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!stripe || !elements) return;
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+        confirmParams: {
+          return_url: `${window.location.origin}/dashboard/family/subscriptions/${requestId}/payment/success`,
+        },
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message ?? "Le paiement Stripe n'a pas pu être confirmé.");
+      }
+
+      if (result.paymentIntent?.status !== "succeeded") {
+        throw new Error("Le paiement Stripe n'est pas encore confirmé.");
+      }
+
+      await confirmStripePaymentIntent(accessToken, result.paymentIntent.id ?? paymentIntentId);
+      onPaid(await getSubscriptionRequest(accessToken, requestId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Impossible de confirmer le paiement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submitPayment} className="mt-5 grid gap-4">
+      <div className="rounded-md border border-neutral-light bg-white p-4">
+        <PaymentElement />
+      </div>
+      {errorMessage ? <InfoBox tone="red">{errorMessage}</InfoBox> : null}
+      <Button type="submit" disabled={!stripe || !elements || isSubmitting}>
+        {isSubmitting ? "Paiement en cours..." : "Payer maintenant"}
+      </Button>
+    </form>
+  );
+}
+
+function EmbeddedStripePayment({
+  draft,
+  onPaid,
+}: {
+  draft: SubscriptionRequestResponse;
+  onPaid: (request: SubscriptionRequestResponse) => void;
+}) {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoadingPayment, setIsLoadingPayment] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function preparePayment() {
+      const token = localStorage.getItem("familyAccessToken");
+
+      if (!token) {
+        throw new Error("Connectez-vous pour payer cette demande.");
+      }
+
+      const intent = await createStripePaymentIntent(token, draft.id);
+
+      if (!intent.clientSecret) {
+        throw new Error("Stripe n'a pas retourné de formulaire de paiement.");
+      }
+
+      if (isMounted) {
+        setAccessToken(token);
+        setClientSecret(intent.clientSecret);
+        setPaymentIntentId(intent.paymentIntentId);
+      }
+    }
+
+    void preparePayment()
+      .catch((error: Error) => {
+        if (isMounted) setErrorMessage(error.message);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingPayment(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [draft.id]);
+
+  if (!stripePromise) {
+    return <InfoBox className="mt-5" tone="red">La clé publique Stripe n&apos;est pas configurée côté frontend.</InfoBox>;
+  }
+
+  if (isLoadingPayment) {
+    return <InfoBox className="mt-5">Préparation du formulaire Stripe...</InfoBox>;
+  }
+
+  if (errorMessage) {
+    return <InfoBox className="mt-5" tone="red">{errorMessage}</InfoBox>;
+  }
+
+  if (!accessToken || !clientSecret || !paymentIntentId) {
+    return <InfoBox className="mt-5" tone="red">Le formulaire de paiement est indisponible.</InfoBox>;
+  }
+
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret,
+        appearance: {
+          theme: "stripe",
+          variables: {
+            borderRadius: "6px",
+            colorPrimary: "#006BB6",
+            fontFamily: "Arial, sans-serif",
+          },
+        },
+      }}
+    >
+      <StripePaymentForm
+        accessToken={accessToken}
+        paymentIntentId={paymentIntentId}
+        requestId={draft.id}
+        onPaid={onPaid}
+      />
+    </Elements>
   );
 }
 
@@ -735,13 +893,6 @@ function ImagineRSubscriptionContent() {
           signatureDocumentsAccepted: true,
         });
       }
-      if (step === 9) {
-        const { accessToken, request } = await ensureDraft();
-        const submitted = await submitImagineRSubscriptionDraft(accessToken, request.id);
-        setDraft(submitted);
-        removeSavedProgress(request.id, selectedMember?.id ?? null, selectedOffer?.id ?? null);
-      }
-
       setStep((current) => Math.min(current + 1, steps.length - 1));
       scrollToFormTop();
     } catch (error) {
@@ -1071,7 +1222,7 @@ function ImagineRSubscriptionContent() {
         ) : null}
 
         {step === 9 ? (
-          <SectionCard title="Paiement simulé">
+          <SectionCard title="Paiement sécurisé par Stripe">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-sm text-neutral-medium">Forfait</p>
@@ -1086,7 +1237,23 @@ function ImagineRSubscriptionContent() {
                 <p className="text-2xl font-bold text-idfm-focus">{centsToEuro(draft?.imagineR?.totalAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 2520 : 40130))}</p>
               </div>
             </div>
-            <InfoBox className="mt-5">Cette étape est simulée pour la démonstration. Aucun paiement réel ne sera effectué.</InfoBox>
+            <InfoBox className="mt-5">
+              Le formulaire est fourni par Stripe et intégré directement dans l&apos;application. Pour la démonstration, utilisez une carte test :
+              aucun paiement réel ne sera effectué.
+            </InfoBox>
+            {draft ? (
+              <EmbeddedStripePayment
+                draft={draft}
+                onPaid={(updatedRequest) => {
+                  setDraft(updatedRequest);
+                  removeSavedProgress(updatedRequest.id, selectedMember?.id ?? null, selectedOffer?.id ?? null);
+                  setStep(10);
+                  scrollToFormTop();
+                }}
+              />
+            ) : (
+              <InfoBox className="mt-5" tone="orange">Finalisez les étapes précédentes pour préparer le paiement.</InfoBox>
+            )}
           </SectionCard>
         ) : null}
 
@@ -1129,7 +1296,7 @@ function ImagineRSubscriptionContent() {
           </SectionCard>
         ) : null}
 
-        {step < 10 ? (
+        {step < 10 && step !== 9 ? (
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
             <Button type="button" variant="ghost" onClick={previousStep} disabled={step <= firstEditableStep}>
               Retour
