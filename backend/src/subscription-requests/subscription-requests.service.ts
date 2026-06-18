@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { DocumentType } from "@prisma/client";
+import { randomUUID } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
+import { extname, join } from "path";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateSubscriptionRequestDto } from "./dtos/create-subscription-request.dto";
 import { CreateImagineRDraftDto, UpdateImagineRRequestDto } from "./dtos/imagine-r-subscription-request.dto";
@@ -8,6 +11,8 @@ import { UpdateSubscriptionRequestDto } from "./dtos/update-subscription-request
 @Injectable()
 export class SubscriptionRequestsService {
   constructor(private readonly prismaService: PrismaService) {}
+
+  private documentUploadDirectory = join(process.cwd(), "uploads", "subscription-documents");
 
   private requestInclude = {
     household: {
@@ -37,6 +42,20 @@ export class SubscriptionRequestsService {
       { key: "PAYMENT", label: "Paiement à confirmer" },
       { key: "READY", label: "Titre en préparation" },
     ];
+
+    if (status === "BLOCKED") {
+      return steps.map((step, index) => ({
+        ...step,
+        status: index < 2 ? "DONE" : index === 2 ? "CURRENT" : "UPCOMING",
+      }));
+    }
+
+    if (status === "REJECTED") {
+      return steps.map((step, index) => ({
+        ...step,
+        status: index < 3 ? "DONE" : "UPCOMING",
+      }));
+    }
 
     const activeIndex =
       status === "ACTIVE"
@@ -151,6 +170,8 @@ export class SubscriptionRequestsService {
       requestNumber: request.requestNumber,
       flowType: request.flowType,
       status: request.status,
+      reviewedAt: this.formatDate(request.reviewedAt),
+      rejectionReason: request.rejectionReason,
       autoRenewalEnabled: request.autoRenewalEnabled,
       renewal: this.formatRenewal(request),
       intelligentDossierEnabled: request.intelligentDossierEnabled,
@@ -196,6 +217,7 @@ export class SubscriptionRequestsService {
         simulatedFileName: document.simulatedFileName,
         simulatedMimeType: document.simulatedMimeType,
         simulatedSizeBytes: document.simulatedSizeBytes,
+        hasStoredFile: Boolean(document.storedFilePath),
         uploadedAt: this.formatDate(document.uploadedAt),
       })),
       imagineR:
@@ -264,6 +286,36 @@ export class SubscriptionRequestsService {
   private buildRequestNumber(prefix = "IR") {
     const random = Math.random().toString(36).slice(2, 7).toUpperCase();
     return `${prefix}-${Date.now().toString(36).toUpperCase()}-${random}`;
+  }
+
+  private extensionFromMimeType(mimeType?: string | null) {
+    if (mimeType === "image/jpeg") return ".jpg";
+    if (mimeType === "image/png") return ".png";
+    if (mimeType === "image/webp") return ".webp";
+    if (mimeType === "image/gif") return ".gif";
+    if (mimeType === "application/pdf") return ".pdf";
+    return null;
+  }
+
+  private async storeDocumentFile(dataUrl?: string | null, fileName?: string | null, mimeType?: string | null) {
+    if (!dataUrl) {
+      return null;
+    }
+
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+
+    if (!match) {
+      throw new BadRequestException("Le fichier justificatif transmis est invalide.");
+    }
+
+    const contentType = mimeType ?? match[1];
+    const extension = this.extensionFromMimeType(contentType) ?? (extname(fileName ?? "") || ".bin");
+    const storedFileName = `${randomUUID()}${extension}`;
+
+    await mkdir(this.documentUploadDirectory, { recursive: true });
+    await writeFile(join(this.documentUploadDirectory, storedFileName), Buffer.from(match[2], "base64"));
+
+    return storedFileName;
   }
 
   private defaultImagineRDates() {
@@ -537,6 +589,11 @@ export class SubscriptionRequestsService {
 
       for (const document of data.documents ?? []) {
         const existingDocument = existing.documents.find((candidate) => candidate.documentType === document.documentType);
+        const storedFilePath = await this.storeDocumentFile(
+          document.simulatedPreviewDataUrl,
+          document.simulatedFileName,
+          document.simulatedMimeType,
+        );
 
         if (existingDocument) {
           await tx.subscriptionDocument.update({
@@ -547,6 +604,8 @@ export class SubscriptionRequestsService {
               simulatedFileName: document.simulatedFileName,
               simulatedMimeType: document.simulatedMimeType,
               simulatedSizeBytes: document.simulatedSizeBytes,
+              simulatedPreviewDataUrl: null,
+              ...(storedFilePath ? { storedFilePath } : {}),
               uploadedAt: new Date(),
             },
           });
@@ -560,6 +619,8 @@ export class SubscriptionRequestsService {
               simulatedFileName: document.simulatedFileName,
               simulatedMimeType: document.simulatedMimeType,
               simulatedSizeBytes: document.simulatedSizeBytes,
+              simulatedPreviewDataUrl: null,
+              storedFilePath,
               uploadedAt: new Date(),
             },
           });

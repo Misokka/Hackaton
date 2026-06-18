@@ -7,6 +7,9 @@ import type {
   AdminSearchResult,
   AdminSosDashboardResponse,
   AdminSosFilter,
+  AdminSubscriptionRequestDetail,
+  AdminSubscriptionDocumentPreview,
+  AdminSubscriptionRequestFilter,
   AdminSubscriptionRequest,
   AdminSupportCase,
   AdminSupportCaseStatus,
@@ -65,18 +68,62 @@ export function getAdminFamily(accessToken: string, id: string) {
   return adminFetch<AdminFamilyDetail>(accessToken, `/api/admin/families/${id}`);
 }
 
-export function getAdminSubscriptionRequests(accessToken: string) {
-  return adminFetch<AdminSubscriptionRequest[]>(accessToken, "/api/admin/subscription-requests");
+export function getAdminSubscriptionRequests(
+  accessToken: string,
+  filter: AdminSubscriptionRequestFilter = "all",
+  query = "",
+) {
+  const params = new URLSearchParams({ filter, q: query });
+  return adminFetch<AdminSubscriptionRequest[]>(accessToken, `/api/admin/subscription-requests?${params.toString()}`);
+}
+
+export function getAdminSubscriptionRequest(accessToken: string, id: string) {
+  return adminFetch<AdminSubscriptionRequestDetail>(accessToken, `/api/admin/subscription-requests/${id}`);
+}
+
+export function getAdminSubscriptionDocumentPreview(accessToken: string, id: string, documentId: string) {
+  return adminFetch<AdminSubscriptionDocumentPreview>(
+    accessToken,
+    `/api/admin/subscription-requests/${id}/documents/${documentId}/preview`,
+  );
 }
 
 export function updateAdminSubscriptionRequest(
   accessToken: string,
   id: string,
-  status: Extract<SubscriptionRequestStatus, "UNDER_REVIEW" | "WAITING_DOCUMENTS" | "CONFIRMED" | "BLOCKED">,
+  status: Extract<SubscriptionRequestStatus, "UNDER_REVIEW" | "WAITING_DOCUMENTS" | "CONFIRMED" | "BLOCKED" | "REJECTED">,
 ) {
   return adminFetch<AdminSubscriptionRequest>(accessToken, `/api/admin/subscription-requests/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+export function updateAdminSubscriptionDocument(
+  accessToken: string,
+  id: string,
+  documentId: string,
+  payload: {
+    status: "VALIDATED" | "REJECTED" | "UNDER_REVIEW";
+    rejectionReason?: string;
+  },
+) {
+  return adminFetch<AdminSubscriptionRequestDetail>(accessToken, `/api/admin/subscription-requests/${id}/documents/${documentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveAdminSubscriptionRequest(accessToken: string, id: string) {
+  return adminFetch<AdminSubscriptionRequestDetail>(accessToken, `/api/admin/subscription-requests/${id}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectAdminSubscriptionRequest(accessToken: string, id: string, reason: string) {
+  return adminFetch<AdminSubscriptionRequestDetail>(accessToken, `/api/admin/subscription-requests/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
 }
 

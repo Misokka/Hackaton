@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, startTransition, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
@@ -60,8 +60,10 @@ function SubscriptionConfirmationContent() {
     const accessToken = localStorage.getItem("familyAccessToken");
 
     if (!accessToken) {
-      setMessage("Connectez-vous pour afficher le suivi de cette demande.");
-      setIsLoading(false);
+      startTransition(() => {
+        setMessage("Connectez-vous pour afficher le suivi de cette demande.");
+        setIsLoading(false);
+      });
       return;
     }
 
@@ -118,12 +120,24 @@ function SubscriptionConfirmationContent() {
       {request ? (
         <div className="grid gap-8">
           <section className="rounded-3xl border border-status-success bg-white p-6 shadow-sm">
-            <Badge tone="green">Demande creee</Badge>
+            <Badge tone={request.status === "REJECTED" ? "red" : request.status === "BLOCKED" ? "orange" : "green"}>
+              {request.status === "REJECTED" ? "Demande refusée" : request.status === "BLOCKED" ? "Correction nécessaire" : "Demande creee"}
+            </Badge>
             <h2 className="mt-4 text-3xl font-bold text-idfm-anthracite">{request.offer.name}</h2>
             <p className="mt-3 text-base leading-7 text-neutral-medium">
-              La demande pour {request.member.firstName} {request.member.lastName} est prete a etre suivie. Aucun abonnement actif
-              n'a ete cree automatiquement.
+              {request.status === "ACTIVE"
+                ? `La demande pour ${request.member.firstName} ${request.member.lastName} est validée. Le titre est actif dans votre espace famille.`
+                : request.status === "REJECTED"
+                  ? `La demande pour ${request.member.firstName} ${request.member.lastName} a été refusée par nos équipes.`
+                  : request.status === "BLOCKED"
+                    ? `La demande pour ${request.member.firstName} ${request.member.lastName} nécessite une correction avant de pouvoir continuer.`
+                    : `La demande pour ${request.member.firstName} ${request.member.lastName} est prete a etre suivie. Aucun abonnement actif n'a ete cree automatiquement.`}
             </p>
+            {request.rejectionReason ? (
+              <InfoBox className="mt-4" tone={request.status === "REJECTED" ? "red" : "orange"}>
+                Motif : {request.rejectionReason}
+              </InfoBox>
+            ) : null}
             <div className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-neutral-medium">Porteur</p>
@@ -160,11 +174,11 @@ function SubscriptionConfirmationContent() {
                   {renewal.label}. Prochaine échéance : {formatMonthYear(renewal.nextDate)}.
                 </p>
                 <p className="mt-2 text-sm leading-6 text-neutral-medium">
-                  Votre titre actuel reste valable jusqu'à sa fin. Vous pouvez annuler avant la prochaine échéance.
+                  Votre titre actuel reste valable jusqu&apos;à sa fin. Vous pouvez annuler avant la prochaine échéance.
                 </p>
                 {renewal.type === "ANNUAL" ? (
                   <InfoBox className="mt-4">
-                    Certains justificatifs pourront être redemandés chaque année si votre situation l'exige, sans refaire tout le parcours.
+                    Certains justificatifs pourront être redemandés chaque année si votre situation l&apos;exige, sans refaire tout le parcours.
                   </InfoBox>
                 ) : null}
                 <div className="mt-5">

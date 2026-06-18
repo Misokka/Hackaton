@@ -1,14 +1,21 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateAdminFoundPassDto } from "./dtos/create-admin-found-pass.dto";
 import { FinalChoiceAdminSosCaseDto } from "./dtos/final-choice-admin-sos-case.dto";
+import { RejectAdminSubscriptionRequestDto } from "./dtos/reject-admin-subscription-request.dto";
 import { UpdateAdminSosCaseStatusDto } from "./dtos/update-admin-sos-case-status.dto";
+import { UpdateAdminSubscriptionDocumentDto } from "./dtos/update-admin-subscription-document.dto";
 import { UpdateAdminSubscriptionRequestDto } from "./dtos/update-admin-subscription-request.dto";
 import { UpdateAdminSupportCaseDto } from "./dtos/update-admin-support-case.dto";
 
 type FamilyRecord = any;
 type SubscriptionRequestRecord = any;
 type SupportCaseRecord = any;
+
+const OPEN_SUBSCRIPTION_REQUEST_STATUSES = ["WAITING_DOCUMENTS", "UNDER_REVIEW", "PAYMENT_PENDING", "BLOCKED"] as const;
+const BLOCKING_DOCUMENT_STATUSES = ["MISSING", "READY", "UPLOADED", "UNDER_REVIEW", "REJECTED"] as const;
 
 const SOS_DESKS = [
   { name: "Gare de Lyon", address: "Place Louis-Armand, 75012 Paris" },
@@ -23,6 +30,8 @@ const PICKUP_DELAY_DAYS = 14;
 @Injectable()
 export class AdminService {
   constructor(private readonly prismaService: PrismaService) {}
+
+  private documentUploadDirectory = join(process.cwd(), "uploads", "subscription-documents");
 
   private customerNumber(id: string) {
     return `CF-${id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -46,6 +55,144 @@ export class AdminService {
     const year = supportCase.createdAt.getFullYear();
     const segment = supportCase.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase();
     return `SOS-${year}-${segment}`;
+  }
+
+  private subscriptionDossierNumber(request: { id: string; requestNumber?: string | null; createdAt: Date }) {
+    if (request.requestNumber) {
+      return request.requestNumber;
+    }
+
+    const year = request.createdAt.getFullYear();
+    const segment = request.id.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
+    return `SUB-${year}-${segment}`;
+  }
+
+  private buildNavigoNumber(memberId: string) {
+    const compact = memberId.replace(/-/g, "").toUpperCase();
+    return `NAV-${compact.slice(0, 4)}-${compact.slice(-4)}`;
+  }
+
+  private getAge(birthDate?: Date | null) {
+    if (!birthDate) {
+      return null;
+    }
+
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+
+    return age;
+  }
+
+  private formatAddress(address?: any | null) {
+    if (!address) {
+      return null;
+    }
+
+    return {
+      id: address.id,
+      street: address.street,
+      addressLine1: address.addressLine1,
+      addressLine2: address.addressLine2,
+      addressLine3: address.addressLine3,
+      postalCode: address.postalCode,
+      city: address.city,
+      country: address.country,
+    };
+  }
+
+  private mapOfferToSubscriptionProductType(productType: string) {
+    if (productType === "IMAGINE_R_JUNIOR") {
+      return "NAVIGO_JUNIOR" as const;
+    }
+
+    if (productType === "IMAGINE_R_SCHOOL" || productType === "IMAGINE_R_STUDENT") {
+      return "IMAGINE_R" as const;
+    }
+
+    if (["NAVIGO_ANNUAL", "NAVIGO_SENIOR", "AMETHYSTE"].includes(productType)) {
+      return productType as "NAVIGO_ANNUAL" | "NAVIGO_SENIOR" | "AMETHYSTE";
+    }
+
+    return "UNKNOWN" as const;
+  }
+
+  private getDocumentCounts(request: { documents: Array<{ status: string }> }) {
+    return {
+      validated: request.documents.filter((document) => document.status === "VALIDATED").length,
+      total: request.documents.length,
+    };
+  }
+
+  private isRequiredDocumentStatusBlocking(status: string) {
+    return (BLOCKING_DOCUMENT_STATUSES as readonly string[]).includes(status);
+  }
+
+  private matchesSubscriptionFilter(request: SubscriptionRequestRecord, filter = "all") {
+    const rejectedDocumentsCount = request.documents.filter((document) => document.status === "REJECTED").length;
+    const missingDocumentsCount = request.documents.filter((document) =>
+      ["MISSING", "READY", "UPLOADED"].includes(document.status),
+    ).length;
+
+    if (filter === "to-review") {
+      return request.status === "UNDER_REVIEW" || request.documents.some((document) => document.status === "UNDER_REVIEW");
+    }
+
+    if (filter === "incomplete") {
+      return missingDocumentsCount > 0 || rejectedDocumentsCount > 0 || request.status === "BLOCKED";
+    }
+
+    if (filter === "processing") {
+      return ["WAITING_DOCUMENTS", "UNDER_REVIEW", "PAYMENT_PENDING"].includes(request.status);
+    }
+
+    if (filter === "approved") {
+      return ["CONFIRMED", "ACTIVE"].includes(request.status);
+    }
+
+    if (filter === "rejected") {
+      return request.status === "REJECTED";
+    }
+
+    if (filter === "blocked") {
+      return request.status === "BLOCKED";
+    }
+
+    return true;
+  }
+
+  private matchesSubscriptionSearch(request: SubscriptionRequestRecord, query = "") {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    const searchable = [
+      request.id,
+      this.subscriptionDossierNumber(request),
+      request.requestNumber ?? "",
+      request.status,
+      request.customerNumber ?? "",
+      request.household?.name ?? "",
+      request.household ? this.customerNumber(request.household.id) : "",
+      request.household?.owner?.firstName ?? "",
+      request.household?.owner?.lastName ?? "",
+      request.household?.owner?.email ?? "",
+      request.member?.firstName ?? "",
+      request.member?.lastName ?? "",
+      request.payerMember?.firstName ?? "",
+      request.payerMember?.lastName ?? "",
+      request.offer?.name ?? "",
+      request.offer?.slug ?? "",
+      request.offer?.productType ?? "",
+    ].join(" ").toLowerCase();
+
+    return searchable.includes(normalizedQuery);
   }
 
   private pickDesk(name?: string) {
@@ -113,38 +260,67 @@ export class AdminService {
   }
 
   private formatSubscriptionRequest(request: SubscriptionRequestRecord) {
+    const documentCounts = this.getDocumentCounts(request);
+
     return {
       id: request.id,
+      requestNumber: request.requestNumber,
+      dossierNumber: this.subscriptionDossierNumber(request),
+      flowType: request.flowType,
       status: request.status,
       autoRenewalEnabled: request.autoRenewalEnabled,
       intelligentDossierEnabled: request.intelligentDossierEnabled,
+      reviewedAt: request.reviewedAt?.toISOString?.() ?? null,
+      rejectionReason: request.rejectionReason,
       createdAt: request.createdAt.toISOString(),
       updatedAt: request.updatedAt.toISOString(),
+      submittedAt: request.submittedAt?.toISOString?.() ?? null,
+      paymentSimulatedAt: request.paymentSimulatedAt?.toISOString?.() ?? null,
+      documentCounts,
       household: {
         id: request.household.id,
         customerNumber: this.customerNumber(request.household.id),
         name: request.household.name,
         ownerName: this.fullName(request.household.owner),
+        ownerEmail: request.household.owner.email,
+        ownerPhone: request.household.owner.phone,
       },
       member: {
         id: request.member.id,
         firstName: request.member.firstName,
         lastName: request.member.lastName,
+        birthDate: request.member.birthDate?.toISOString?.() ?? null,
+        age: this.getAge(request.member.birthDate),
         profileType: request.member.profileType,
+        relationship: request.member.relationship,
+        schoolLevel: request.member.schoolLevel,
+        department: request.member.department,
       },
       payer: request.payerMember
         ? {
             id: request.payerMember.id,
             firstName: request.payerMember.firstName,
             lastName: request.payerMember.lastName,
+            email: request.household.owner.email,
+            phone: request.household.owner.phone,
+            role: request.payerMember.isLegalRepresentative ? "Responsable légal / payeur" : "Payeur",
           }
-        : null,
+        : {
+            id: request.household.owner.id,
+            firstName: request.household.owner.firstName,
+            lastName: request.household.owner.lastName,
+            email: request.household.owner.email,
+            phone: request.household.owner.phone,
+            role: "Gestionnaire du foyer / payeur",
+          },
       offer: {
         id: request.offer.id,
         slug: request.offer.slug,
         name: request.offer.name,
         productType: request.offer.productType,
         priceLabel: request.offer.priceLabel,
+        durationLabel: request.offer.durationLabel,
+        targetProfile: request.offer.targetProfile,
       },
       documents: request.documents.map((document) => ({
         id: document.id,
@@ -152,7 +328,55 @@ export class AdminService {
         documentType: document.documentType,
         status: document.status,
         rejectionReason: document.rejectionReason,
+        simulatedFileName: document.simulatedFileName,
+        simulatedMimeType: document.simulatedMimeType,
+        simulatedSizeBytes: document.simulatedSizeBytes,
+        hasStoredFile: Boolean(document.storedFilePath),
+        uploadedAt: document.uploadedAt?.toISOString?.() ?? null,
       })),
+    };
+  }
+
+  private formatSubscriptionRequestDetail(request: SubscriptionRequestRecord) {
+    const holderAddress = request.addresses?.find((address) => address.type === "HOLDER");
+    const payerAddress = request.addresses?.find((address) => address.type === "PAYER");
+    const formatted = this.formatSubscriptionRequest(request);
+
+    return {
+      ...formatted,
+      amounts: {
+        baseAmountCents: request.baseAmountCents,
+        feeAmountCents: request.feeAmountCents,
+        totalAmountCents: request.totalAmountCents,
+        currency: request.currency,
+        priceLabel: request.offer.priceLabel,
+      },
+      renewal: {
+        enabled: request.autoRenewalEnabled,
+        type: request.renewalType,
+        status: request.renewalStatus,
+        nextDate: request.renewalNextDate?.toISOString?.() ?? null,
+      },
+      holder: {
+        ...formatted.member,
+        address: this.formatAddress(holderAddress),
+        schoolName: request.schoolName,
+        schoolZipOrCity: request.schoolZipOrCity,
+        schoolLevel: request.imagineRSchoolLevel ?? request.member.schoolLevel,
+        scholarshipStatus: request.scholarshipStatus,
+      },
+      payer: {
+        ...formatted.payer,
+        birthDate: request.payerBirthDate?.toISOString?.() ?? null,
+        address: this.formatAddress(payerAddress ?? holderAddress),
+      },
+      signatures: {
+        informationAccepted: request.signatureInformationAccepted,
+        payerAccepted: request.signaturePayerAccepted,
+        termsAccepted: request.signatureTermsAccepted,
+        documentsAccepted: request.signatureDocumentsAccepted,
+        signedAt: request.signedAt?.toISOString?.() ?? null,
+      },
     };
   }
 
@@ -570,7 +794,12 @@ export class AdminService {
         household: { include: { owner: true } },
         member: true,
         payerMember: true,
-        offer: true,
+        offer: {
+          include: {
+            requiredDocuments: { orderBy: { order: "asc" } },
+          },
+        },
+        addresses: true,
         documents: {
           orderBy: { createdAt: "asc" },
         },
@@ -601,7 +830,6 @@ export class AdminService {
       this.prismaService.householdMember.count(),
     ]);
 
-    const openRequestStatuses = ["WAITING_DOCUMENTS", "UNDER_REVIEW", "PAYMENT_PENDING", "BLOCKED"];
     const recentActivity = [
       ...families.flatMap((family) =>
         family.activities.map((activity) => ({
@@ -637,7 +865,7 @@ export class AdminService {
       stats: {
         familiesCount: families.length,
         profilesCount,
-        openSubscriptionRequestsCount: requests.filter((request) => openRequestStatuses.includes(request.status)).length,
+        openSubscriptionRequestsCount: requests.filter((request) => (OPEN_SUBSCRIPTION_REQUEST_STATUSES as readonly string[]).includes(request.status)).length,
         lostPassesCount: supportCases.filter((supportCase) => supportCase.type === "LOST_PASS" && !this.isSosClosed(supportCase.status)).length,
         foundPassesCount: supportCases.filter((supportCase) => supportCase.type === "FOUND_PASS" && !this.isSosClosed(supportCase.status)).length,
         dossiersToReviewCount: requests.filter((request) => request.status === "UNDER_REVIEW" || request.status === "BLOCKED").length,
@@ -772,9 +1000,23 @@ export class AdminService {
     return this.formatFamilyDetail(family);
   }
 
-  async getSubscriptionRequests() {
+  async getSubscriptionRequests(filter = "all", query = "") {
     const requests = await this.findSubscriptionRequestRecords();
-    return requests.map((request) => this.formatSubscriptionRequest(request));
+
+    return requests
+      .filter((request) => this.matchesSubscriptionFilter(request, filter))
+      .filter((request) => this.matchesSubscriptionSearch(request, query))
+      .map((request) => this.formatSubscriptionRequest(request));
+  }
+
+  async getSubscriptionRequest(id: string) {
+    const request = (await this.findSubscriptionRequestRecords()).find((candidate) => candidate.id === id);
+
+    if (!request) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    return this.formatSubscriptionRequestDetail(request);
   }
 
   async updateSubscriptionRequest(id: string, data: UpdateAdminSubscriptionRequestDto) {
@@ -787,7 +1029,12 @@ export class AdminService {
         household: { include: { owner: true } },
         member: true,
         payerMember: true,
-        offer: true,
+        offer: {
+          include: {
+            requiredDocuments: { orderBy: { order: "asc" } },
+          },
+        },
+        addresses: true,
         documents: {
           orderBy: { createdAt: "asc" },
         },
@@ -803,6 +1050,350 @@ export class AdminService {
     });
 
     return this.formatSubscriptionRequest(updated);
+  }
+
+  async updateSubscriptionRequestDocument(
+    id: string,
+    documentId: string,
+    data: UpdateAdminSubscriptionDocumentDto,
+  ) {
+    const existing = await this.prismaService.subscriptionRequest.findUnique({
+      where: { id },
+      include: {
+        household: { include: { owner: true } },
+        member: true,
+        payerMember: true,
+        offer: {
+          include: {
+            requiredDocuments: { orderBy: { order: "asc" } },
+          },
+        },
+        addresses: true,
+        documents: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const targetDocument = existing.documents.find((document) => document.id === documentId);
+
+    if (!targetDocument) {
+      throw new NotFoundException("Justificatif introuvable.");
+    }
+
+    if (data.status === "REJECTED" && !data.rejectionReason?.trim()) {
+      throw new BadRequestException("Le motif de refus du document est obligatoire.");
+    }
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      await tx.subscriptionDocument.update({
+        where: { id: documentId },
+        data: {
+          status: data.status,
+          rejectionReason: data.status === "REJECTED" ? data.rejectionReason?.trim() : null,
+        },
+      });
+
+      const documents = existing.documents.map((document) =>
+        document.id === documentId
+          ? {
+              ...document,
+              status: data.status,
+              rejectionReason: data.status === "REJECTED" ? data.rejectionReason?.trim() : null,
+            }
+          : document,
+      );
+      const hasRejectedDocument = documents.some((document) => document.status === "REJECTED");
+      const hasBlockingDocument = documents.some((document) => this.isRequiredDocumentStatusBlocking(document.status));
+
+      const request = await tx.subscriptionRequest.update({
+        where: { id },
+        data: {
+          status: hasRejectedDocument ? "BLOCKED" : hasBlockingDocument ? "UNDER_REVIEW" : existing.status,
+          reviewedAt: new Date(),
+          rejectionReason: hasRejectedDocument ? data.rejectionReason?.trim() ?? existing.rejectionReason : null,
+        },
+        include: {
+          household: { include: { owner: true } },
+          member: true,
+          payerMember: true,
+          offer: {
+            include: {
+              requiredDocuments: { orderBy: { order: "asc" } },
+            },
+          },
+          addresses: true,
+          documents: {
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+
+      if (data.status === "REJECTED") {
+        await tx.familyNotification.create({
+          data: {
+            householdId: existing.householdId,
+            memberId: existing.memberId,
+            type: "SUPPORT_UPDATE",
+            severity: "DANGER",
+            title: `${existing.member.firstName} — justificatif à corriger`,
+            message: `${targetDocument.label} a été refusé : ${data.rejectionReason?.trim()}.`,
+          },
+        });
+      }
+
+      await tx.householdActivity.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          label: `Back-office : justificatif ${targetDocument.label} passé au statut ${data.status}.`,
+        },
+      });
+
+      return request;
+    });
+
+    return this.formatSubscriptionRequestDetail(updated);
+  }
+
+  async getSubscriptionRequestDocumentPreview(id: string, documentId: string) {
+    const request = await this.prismaService.subscriptionRequest.findUnique({
+      where: { id },
+      include: {
+        documents: true,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const document = request.documents.find((candidate) => candidate.id === documentId);
+
+    if (!document) {
+      throw new NotFoundException("Justificatif introuvable.");
+    }
+
+    if (document.storedFilePath) {
+      const file = await readFile(join(this.documentUploadDirectory, document.storedFilePath));
+      const mimeType = document.simulatedMimeType ?? "application/octet-stream";
+
+      return {
+        fileName: document.simulatedFileName,
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${file.toString("base64")}`,
+      };
+    }
+
+    if (document.simulatedPreviewDataUrl) {
+      return {
+        fileName: document.simulatedFileName,
+        mimeType: document.simulatedMimeType ?? "application/octet-stream",
+        dataUrl: document.simulatedPreviewDataUrl,
+      };
+    }
+
+    throw new NotFoundException("Aucune image stockée pour ce justificatif.");
+  }
+
+  async approveSubscriptionRequest(id: string) {
+    const existing = await this.prismaService.subscriptionRequest.findUnique({
+      where: { id },
+      include: {
+        household: { include: { owner: true } },
+        member: {
+          include: {
+            subscriptions: { orderBy: { updatedAt: "desc" } },
+            navigoPass: true,
+          },
+        },
+        payerMember: true,
+        offer: {
+          include: {
+            requiredDocuments: { orderBy: { order: "asc" } },
+          },
+        },
+        addresses: true,
+        documents: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const blockingDocument = existing.documents.find((document) => this.isRequiredDocumentStatusBlocking(document.status));
+
+    if (blockingDocument) {
+      throw new BadRequestException(`Le justificatif "${blockingDocument.label}" doit être validé avant validation du dossier.`);
+    }
+
+    if (!existing.documents.length) {
+      throw new BadRequestException("Aucun justificatif n'est associé à cette demande.");
+    }
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      const subscription = await tx.subscription.upsert({
+        where: { sourceRequestId: id },
+        create: {
+          householdMemberId: existing.memberId,
+          productType: this.mapOfferToSubscriptionProductType(existing.offer.productType),
+          productName: existing.offer.name,
+          status: "ACTIVE",
+          sourceRequestId: id,
+          nextActionLabel: existing.autoRenewalEnabled ? "Renouvellement automatique actif" : null,
+          renewalDate: existing.validityEndDate ?? existing.renewalNextDate ?? null,
+        },
+        update: {
+          productType: this.mapOfferToSubscriptionProductType(existing.offer.productType),
+          productName: existing.offer.name,
+          status: "ACTIVE",
+          nextActionLabel: existing.autoRenewalEnabled ? "Renouvellement automatique actif" : null,
+          renewalDate: existing.validityEndDate ?? existing.renewalNextDate ?? null,
+        },
+      });
+
+      await tx.navigoPass.upsert({
+        where: { householdMemberId: existing.memberId },
+        create: {
+          householdMemberId: existing.memberId,
+          navigoNumber: this.buildNavigoNumber(existing.memberId),
+          productName: existing.offer.name,
+          supportType: "PHYSICAL",
+          status: "ACTIVE",
+        },
+        update: {
+          productName: existing.offer.name,
+          status: "ACTIVE",
+        },
+      });
+
+      await tx.familyNotification.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          type: "SUPPORT_UPDATE",
+          severity: "SUCCESS",
+          title: `${existing.member.firstName} — titre validé`,
+          message: `La demande ${existing.offer.name} est validée. Le titre est maintenant actif dans votre espace famille.`,
+        },
+      });
+
+      await tx.householdActivity.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          label: `Back-office : demande ${existing.offer.name} validée et titre actif créé.`,
+        },
+      });
+
+      return tx.subscriptionRequest.update({
+        where: { id },
+        data: {
+          status: "ACTIVE",
+          reviewedAt: new Date(),
+          rejectionReason: null,
+        },
+        include: {
+          household: { include: { owner: true } },
+          member: true,
+          payerMember: true,
+          offer: {
+            include: {
+              requiredDocuments: { orderBy: { order: "asc" } },
+            },
+          },
+          addresses: true,
+          documents: {
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+    });
+
+    return this.formatSubscriptionRequestDetail(updated);
+  }
+
+  async rejectSubscriptionRequest(id: string, data: RejectAdminSubscriptionRequestDto) {
+    if (!data.reason?.trim()) {
+      throw new BadRequestException("Le motif de refus est obligatoire.");
+    }
+
+    const existing = await this.prismaService.subscriptionRequest.findUnique({
+      where: { id },
+      include: {
+        household: { include: { owner: true } },
+        member: true,
+        payerMember: true,
+        offer: {
+          include: {
+            requiredDocuments: { orderBy: { order: "asc" } },
+          },
+        },
+        addresses: true,
+        documents: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException("Demande de souscription introuvable.");
+    }
+
+    const updated = await this.prismaService.$transaction(async (tx) => {
+      const request = await tx.subscriptionRequest.update({
+        where: { id },
+        data: {
+          status: "REJECTED",
+          reviewedAt: new Date(),
+          rejectionReason: data.reason.trim(),
+        },
+        include: {
+          household: { include: { owner: true } },
+          member: true,
+          payerMember: true,
+          offer: {
+            include: {
+              requiredDocuments: { orderBy: { order: "asc" } },
+            },
+          },
+          addresses: true,
+          documents: {
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+
+      await tx.familyNotification.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          type: "SUPPORT_UPDATE",
+          severity: "DANGER",
+          title: `${existing.member.firstName} — demande refusée`,
+          message: `La demande ${existing.offer.name} est refusée : ${data.reason.trim()}.`,
+        },
+      });
+
+      await tx.householdActivity.create({
+        data: {
+          householdId: existing.householdId,
+          memberId: existing.memberId,
+          label: `Back-office : demande ${existing.offer.name} refusée.`,
+        },
+      });
+
+      return request;
+    });
+
+    return this.formatSubscriptionRequestDetail(updated);
   }
 
   async getSupportCases() {

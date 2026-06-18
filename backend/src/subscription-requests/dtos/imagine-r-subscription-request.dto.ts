@@ -88,6 +88,10 @@ export class ImagineRDocumentPatchDto {
   @IsInt()
   @Min(0)
   simulatedSizeBytes?: number;
+
+  @IsOptional()
+  @IsString()
+  simulatedPreviewDataUrl?: string;
 }
 
 export class UpdateImagineRRequestDto {

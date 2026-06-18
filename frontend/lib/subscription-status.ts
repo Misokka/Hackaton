@@ -7,7 +7,8 @@ const labels: Record<SubscriptionRequestStatus, string> = {
   UNDER_REVIEW: "En vérification",
   CONFIRMED: "Confirmée",
   ACTIVE: "Active",
-  BLOCKED: "Bloquée",
+  BLOCKED: "Correction nécessaire",
+  REJECTED: "Refusée",
   CANCELLED: "Annulée",
 };
 

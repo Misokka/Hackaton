@@ -4,7 +4,9 @@ import { AdminRoleGuard } from "./admin-role.guard";
 import { AdminService } from "./admin.service";
 import { CreateAdminFoundPassDto } from "./dtos/create-admin-found-pass.dto";
 import { FinalChoiceAdminSosCaseDto } from "./dtos/final-choice-admin-sos-case.dto";
+import { RejectAdminSubscriptionRequestDto } from "./dtos/reject-admin-subscription-request.dto";
 import { UpdateAdminSosCaseStatusDto } from "./dtos/update-admin-sos-case-status.dto";
+import { UpdateAdminSubscriptionDocumentDto } from "./dtos/update-admin-subscription-document.dto";
 import { UpdateAdminSubscriptionRequestDto } from "./dtos/update-admin-subscription-request.dto";
 import { UpdateAdminSupportCaseDto } from "./dtos/update-admin-support-case.dto";
 
@@ -44,8 +46,24 @@ export class AdminController {
   }
 
   @Get("subscription-requests")
-  async getSubscriptionRequests() {
-    return this.adminService.getSubscriptionRequests();
+  async getSubscriptionRequests(
+    @Query("filter") filter = "all",
+    @Query("q") query = "",
+  ) {
+    return this.adminService.getSubscriptionRequests(filter, query);
+  }
+
+  @Get("subscription-requests/:id")
+  async getSubscriptionRequest(@Param("id") id: string) {
+    return this.adminService.getSubscriptionRequest(id);
+  }
+
+  @Get("subscription-requests/:id/documents/:documentId/preview")
+  async getSubscriptionRequestDocumentPreview(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+  ) {
+    return this.adminService.getSubscriptionRequestDocumentPreview(id, documentId);
   }
 
   @Patch("subscription-requests/:id")
@@ -54,6 +72,28 @@ export class AdminController {
     @Body() data: UpdateAdminSubscriptionRequestDto,
   ) {
     return this.adminService.updateSubscriptionRequest(id, data);
+  }
+
+  @Patch("subscription-requests/:id/documents/:documentId")
+  async updateSubscriptionRequestDocument(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @Body() data: UpdateAdminSubscriptionDocumentDto,
+  ) {
+    return this.adminService.updateSubscriptionRequestDocument(id, documentId, data);
+  }
+
+  @Post("subscription-requests/:id/approve")
+  async approveSubscriptionRequest(@Param("id") id: string) {
+    return this.adminService.approveSubscriptionRequest(id);
+  }
+
+  @Post("subscription-requests/:id/reject")
+  async rejectSubscriptionRequest(
+    @Param("id") id: string,
+    @Body() data: RejectAdminSubscriptionRequestDto,
+  ) {
+    return this.adminService.rejectSubscriptionRequest(id, data);
   }
 
   @Get("support-cases")
