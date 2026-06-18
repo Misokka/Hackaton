@@ -17,11 +17,11 @@ import { getMyHouseholdDashboard } from "@/lib/api/households";
 import {
   createImagineRSubscriptionDraft,
   getSubscriptionRequest,
-  submitImagineRSubscriptionDraft,
   updateImagineRSubscriptionDraft,
   uploadImagineRSubscriptionDocumentFile,
 } from "@/lib/api/subscriptions";
 import { getTitleOffers } from "@/lib/api/titles";
+import { createStripeCheckoutSession } from "@/lib/api/payments";
 import type {
   DashboardMember,
   HouseholdDashboardResponse,
@@ -342,6 +342,7 @@ function ImagineRSubscriptionContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isRedirectingToStripe, setIsRedirectingToStripe] = useState(false);
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null);
   const bypassNavigationWarning = useRef(false);
   const [form, setForm] = useState<FormState>({
@@ -678,9 +679,15 @@ function ImagineRSubscriptionContent() {
       }
       if (step === 9) {
         const { accessToken, request } = await ensureDraft();
-        const submitted = await submitImagineRSubscriptionDraft(accessToken, request.id);
-        setDraft(submitted);
-        removeSavedProgress(request.id, selectedMember?.id ?? null, selectedOffer?.id ?? null);
+        setIsRedirectingToStripe(true);
+        const session = await createStripeCheckoutSession(accessToken, request.id);
+
+        if (!session.url) {
+          throw new Error("Stripe n'a pas retourné d'URL de paiement.");
+        }
+
+        window.location.href = session.url;
+        return;
       }
 
       setStep((current) => Math.min(current + 1, steps.length - 1));
@@ -690,6 +697,7 @@ function ImagineRSubscriptionContent() {
       scrollToErrorMessage();
     } finally {
       setIsSaving(false);
+      setIsRedirectingToStripe(false);
     }
   }
 
@@ -978,7 +986,7 @@ function ImagineRSubscriptionContent() {
         ) : null}
 
         {step === 9 ? (
-          <SectionCard title="Paiement simulé">
+          <SectionCard title="Paiement sécurisé par Stripe">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-sm text-neutral-medium">Forfait</p>
@@ -993,7 +1001,15 @@ function ImagineRSubscriptionContent() {
                 <p className="text-2xl font-bold text-idfm-focus">{centsToEuro(draft?.imagineR?.totalAmountCents ?? (selectedOffer?.productType === "IMAGINE_R_JUNIOR" ? 2520 : 40130))}</p>
               </div>
             </div>
-            <InfoBox className="mt-5">Cette étape est simulée pour la démonstration. Aucun paiement réel ne sera effectué.</InfoBox>
+            <InfoBox className="mt-5">
+              Vous allez être redirigé vers une page de paiement sécurisée Stripe. Pour la démonstration, le paiement se fait en mode test :
+              aucun paiement réel ne sera effectué.
+            </InfoBox>
+            <div className="mt-5">
+              <Button type="button" onClick={next} disabled={isSaving || isRedirectingToStripe || !draft}>
+                {isRedirectingToStripe ? "Redirection vers Stripe..." : "Payer avec Stripe"}
+              </Button>
+            </div>
           </SectionCard>
         ) : null}
 
@@ -1036,7 +1052,7 @@ function ImagineRSubscriptionContent() {
           </SectionCard>
         ) : null}
 
-        {step < 10 ? (
+        {step < 10 && step !== 9 ? (
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
             <Button type="button" variant="ghost" onClick={() => setStep((current) => Math.max(current - 1, 0))}>
               Retour
