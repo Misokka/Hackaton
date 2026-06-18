@@ -233,7 +233,15 @@ function SectionCard({ children, title }: { children: ReactNode; title: string }
 
 function scrollToFormTop() {
   window.setTimeout(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const tabs = document.getElementById("family-dashboard-tabs");
+
+    if (!tabs) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const top = tabs.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
   }, 50);
 }
 

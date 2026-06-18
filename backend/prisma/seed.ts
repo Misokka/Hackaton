@@ -3,6 +3,7 @@ import argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
+import { buildNavigoNumber } from "../src/navigo-passes/navigo-number.util";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -133,19 +134,6 @@ const offers = [
       { documentType: "SITUATION_PROOF", label: "Justificatif de situation" },
     ],
   },
-  {
-    slug: "navigo-liberte-plus",
-    name: "Navigo Liberté+",
-    productType: "NAVIGO_LIBERTE",
-    shortDescription: "Le paiement à l'usage pour les trajets occasionnels.",
-    longDescription: "Une offre complémentaire pour voyager ponctuellement sans abonnement mensuel.",
-    priceLabel: "Dès 1,64 € / trajet",
-    durationLabel: "À l'usage",
-    targetProfile: "ADULT",
-    order: 7,
-    benefits: ["Adapté aux trajets occasionnels", "Paiement à l'usage", "Complément d'offre"],
-    documents: [{ documentType: "PAYMENT_METHOD", label: "Moyen de paiement" }],
-  },
 ] as const;
 
 async function main() {
@@ -219,7 +207,7 @@ async function main() {
     where: {
       householdId: null,
       type: "FOUND_PASS",
-      passNumberMasked: "********1234",
+      passNumberMasked: buildNavigoNumber("seed-found-pass"),
     },
   });
 
@@ -463,10 +451,10 @@ async function main() {
       householdId: household.id,
       memberId: child.id,
       type: "LOST_PASS",
-      status: "OPEN",
+      status: "PASS_DEACTIVATION_REQUESTED",
       reason: "LOST",
-      chosenResolution: "DEACTIVATE_ONLY",
-      passNumberMasked: "**** 1234",
+      chosenResolution: "REPLACEMENT_CARD",
+      passNumberMasked: buildNavigoNumber(child.id),
       description: "Passe perdu déclaré depuis l'espace famille.",
       createdAt: new Date("2026-06-16T11:00:00.000Z"),
     },
@@ -476,7 +464,7 @@ async function main() {
     data: {
       type: "FOUND_PASS",
       status: "OPEN",
-      passNumberMasked: "********1234",
+      passNumberMasked: buildNavigoNumber("seed-found-pass"),
       foundLocation: "Gare de Lyon - guichet services",
       depositedAtDesk: true,
       createdAt: new Date("2026-06-16T11:30:00.000Z"),

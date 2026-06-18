@@ -7,6 +7,7 @@ import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { InfoBox } from "@/components/molecules/InfoBox";
+import { TablePagination } from "@/components/molecules/TablePagination";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
 import {
   approveAdminSubscriptionRequest,
@@ -16,6 +17,7 @@ import {
   updateAdminSubscriptionDocument,
 } from "@/lib/api/admin";
 import { buildApiUrl } from "@/lib/api";
+import { paginateItems } from "@/lib/pagination";
 import type {
   AdminSubscriptionDocumentPreview,
   AdminSubscriptionRequest,
@@ -58,6 +60,8 @@ const documentStatusLabels: Record<SubscriptionDocumentStatus, string> = {
   VALIDATED: "Validé",
   REJECTED: "Refusé",
 };
+
+const PAGE_SIZE = 10;
 
 function parseStoredUser(value: string | null): StoredUser | null {
   if (!value) return null;
@@ -485,6 +489,7 @@ export default function AdminTitlesPage() {
   const [filter, setFilter] = useState<AdminSubscriptionRequestFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedRequest, setSelectedRequest] = useState<AdminSubscriptionRequestDetail | null>(null);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "green" | "red" | "orange" | "blue"; text: string } | null>(null);
@@ -501,6 +506,7 @@ export default function AdminTitlesPage() {
     approved: requests.filter((request) => ["ACTIVE", "CONFIRMED"].includes(request.status)).length,
     rejected: requests.filter((request) => request.status === "REJECTED").length,
   }), [requests]);
+  const requestsPagination = paginateItems(requests, page, PAGE_SIZE);
 
   const refreshRequests = useCallback(async (
     accessToken = getAccessToken(),
@@ -512,6 +518,7 @@ export default function AdminTitlesPage() {
 
     startTransition(() => {
       setRequests(response);
+      setPage(1);
     });
   }, [filter, query]);
 
@@ -677,7 +684,7 @@ export default function AdminTitlesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-light">
-                  {requests.map((request) => (
+                  {requestsPagination.items.map((request) => (
                     <tr key={request.id} className="align-top hover:bg-idfm-light/50">
                       <td className="px-4 py-4">
                         <p className="font-semibold text-idfm-interaction">{request.dossierNumber}</p>
@@ -715,6 +722,17 @@ export default function AdminTitlesPage() {
               <EmptyState title="Aucune demande trouvée" description="Aucune demande de titre ne correspond aux filtres actifs." />
             </div>
           )}
+          {requests.length ? (
+            <TablePagination
+              page={requestsPagination.page}
+              pageCount={requestsPagination.pageCount}
+              start={requestsPagination.start + 1}
+              end={requestsPagination.end}
+              total={requestsPagination.total}
+              onPrevious={() => setPage((current) => Math.max(current - 1, 1))}
+              onNext={() => setPage((current) => Math.min(current + 1, requestsPagination.pageCount))}
+            />
+          ) : null}
         </section>
       </div>
 

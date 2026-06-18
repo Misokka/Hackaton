@@ -15,7 +15,7 @@ export default function FoundPassPage() {
   const [foundLocation, setFoundLocation] = useState("");
   const [depositedAtDesk, setDepositedAtDesk] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<{ message: string; masked: string } | null>(null);
+  const [success, setSuccess] = useState<{ message: string; passNumber: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -41,7 +41,7 @@ export default function FoundPassPage() {
 
       setSuccess({
         message: response.message,
-        masked: response.passNumberMasked,
+        passNumber: response.passNumberMasked,
       });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Le signalement n'a pas pu etre enregistre.");
@@ -72,7 +72,7 @@ export default function FoundPassPage() {
             <Input
               label="Numero du passe"
               name="pass-number"
-              placeholder="123456789"
+              placeholder="0 660 654 567 R"
               value={passNumber}
               onChange={(event) => setPassNumber(event.target.value)}
             />
@@ -99,7 +99,7 @@ export default function FoundPassPage() {
         {success ? (
           <InfoBox tone="green">
             <span className="font-semibold text-status-success">{success.message}</span>
-            <span className="mt-1 block text-neutral-medium">Reference du passe masquee : {success.masked}</span>
+            <span className="mt-1 block text-neutral-medium">Numero enregistre : {success.passNumber}</span>
           </InfoBox>
         ) : null}
 

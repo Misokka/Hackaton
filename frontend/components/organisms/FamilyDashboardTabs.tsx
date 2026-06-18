@@ -10,7 +10,7 @@ const tabs = [
   { id: "overview", label: "Vue d'ensemble", icon: "/assets/iconparcours/svgexport-1.svg" },
   { id: "profiles", label: "Profils", icon: "/assets/iconparcours/Femme.svg" },
   { id: "titles", label: "Titres", icon: "/assets/iconparcours/svgexport-3.svg" },
-  { id: "services", label: "Services", icon: "/assets/iconparcours/svgexport-5.svg" },
+  { id: "services", label: "SOS Navigo", icon: "/assets/iconparcours/svgexport-5.svg" },
   { id: "demarches", label: "Démarches", icon: "/assets/iconparcours/svgexport-10.svg" },
   { id: "alerts", label: "Alertes", icon: "/assets/iconparcours/svgexport-7.svg" },
   { id: "help", label: "Aide", icon: "/assets/iconparcours/svgexport-8.svg" },
@@ -34,7 +34,7 @@ export function FamilyDashboardTabs({
   basePath = "/dashboard/family",
 }: FamilyDashboardTabsProps) {
   return (
-    <nav className="overflow-x-auto border-b border-neutral-light">
+    <nav id="family-dashboard-tabs" className="overflow-x-auto border-b border-neutral-light">
       <div className="flex min-w-max gap-2">
         {tabs.map((tab) => (
           <DashboardTab

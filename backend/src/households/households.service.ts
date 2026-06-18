@@ -270,6 +270,7 @@ export class HouseholdsService {
       IN_PROGRESS: "En vérification",
       TRANSFER_TO_PHONE_REQUESTED: "En vérification",
       PASS_DEACTIVATION_REQUESTED: "En vérification",
+      PERMANENT_DIGITAL_TRANSFER_REQUESTED: "Terminée",
       PASS_FOUND_WAITING_PICKUP: "À compléter",
       PASS_PICKED_UP: "À compléter",
       DIGITAL_SUPPORT_CONFIRMED: "Terminée",
@@ -298,8 +299,9 @@ export class HouseholdsService {
     if (status === "PASS_FOUND_WAITING_PICKUP") return "Récupérer le pass au guichet";
     if (status === "PASS_PICKED_UP") return "Choisir le support final";
     if (status === "OPEN" || status === "IN_PROGRESS") return "Suivre l'avancement";
-    if (status === "TRANSFER_TO_PHONE_REQUESTED") return "Suivre le transfert sur téléphone";
-    if (status === "PASS_DEACTIVATION_REQUESTED") return "Suivre la désactivation";
+    if (status === "TRANSFER_TO_PHONE_REQUESTED") return "Suivre le transfert numerique temporaire";
+    if (status === "PASS_DEACTIVATION_REQUESTED") return "Suivre la demande de nouvelle carte";
+    if (status === "PERMANENT_DIGITAL_TRANSFER_REQUESTED") return "Consulter le dossier terminé";
     if (status === "RESOLVED") return "Consulter le dossier terminé";
     return "Voir le détail";
   }
@@ -324,6 +326,7 @@ export class HouseholdsService {
           | "IN_PROGRESS"
           | "TRANSFER_TO_PHONE_REQUESTED"
           | "PASS_DEACTIVATION_REQUESTED"
+          | "PERMANENT_DIGITAL_TRANSFER_REQUESTED"
           | "PASS_FOUND_WAITING_PICKUP"
           | "PASS_PICKED_UP"
           | "DIGITAL_SUPPORT_CONFIRMED"

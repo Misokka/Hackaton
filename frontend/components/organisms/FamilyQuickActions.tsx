@@ -35,7 +35,7 @@ export function FamilyQuickActions({ members }: FamilyQuickActionsProps) {
           title="J'ai trouve un passe"
           description="Un parcours public et neutre pour signaler un passe trouve sans exposer son proprietaire."
           href="/found-pass"
-          imageSrc="/assets/illustrations/hand-holding-ticket.png"
+          imageSrc="/assets/logos/pictogrammes/generic-pass-card.png"
         />
         <QuickActionCard
           title="Consulter mes profils"

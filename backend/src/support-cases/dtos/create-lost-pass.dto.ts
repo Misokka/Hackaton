@@ -1,7 +1,18 @@
-import { IsBoolean, IsIn, IsNotEmpty, IsString } from "class-validator";
+import { IsBoolean, IsIn, IsNotEmpty, IsString } from 'class-validator';
 
-export const LOST_PASS_REASONS = ["LOST", "STOLEN", "DAMAGED", "UNKNOWN"] as const;
-export const LOST_PASS_RESOLUTIONS = ["TRANSFER_TO_PHONE", "DEACTIVATE_ONLY"] as const;
+export const LOST_PASS_REASONS = [
+  'LOST',
+  'STOLEN',
+  'DAMAGED',
+  'UNKNOWN',
+] as const;
+export const LOST_PASS_RESOLUTIONS = [
+  'TRANSFER_TO_PHONE',
+  'DEACTIVATE_ONLY',
+  'TEMPORARY_DIGITAL_TRANSFER',
+  'REPLACEMENT_CARD',
+  'PERMANENT_DIGITAL_TRANSFER',
+] as const;
 
 export type LostPassReason = (typeof LOST_PASS_REASONS)[number];
 export type LostPassResolution = (typeof LOST_PASS_RESOLUTIONS)[number];

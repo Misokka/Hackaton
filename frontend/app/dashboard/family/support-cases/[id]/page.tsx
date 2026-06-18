@@ -9,8 +9,8 @@ import { InfoBox } from "@/components/molecules/InfoBox";
 import { SupportCaseTimeline } from "@/components/molecules/SupportCaseTimeline";
 import { CancelSupportCaseModal } from "@/components/organisms/CancelSupportCaseModal";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
-import { cancelSupportCase, getSupportCaseDetail } from "@/lib/api/households";
-import type { SupportCaseDetail } from "@/lib/api/types";
+import { cancelSupportCase, getSupportCaseDetail, registerSupportCaseFinalChoice } from "@/lib/api/households";
+import type { SupportCaseDetail, SupportCaseFinalChoice } from "@/lib/api/types";
 import {
   finalChoiceLabels,
   formatSupportCaseDate,
@@ -31,6 +31,7 @@ export default function SupportCaseDetailPage() {
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [isSubmittingChoice, setIsSubmittingChoice] = useState(false);
 
   useEffect(() => {
     const accessToken = localStorage.getItem("familyAccessToken");
@@ -76,6 +77,42 @@ export default function SupportCaseDetailPage() {
     }
   }
 
+  async function handleFinalChoice(finalChoice: SupportCaseFinalChoice) {
+    const accessToken = localStorage.getItem("familyAccessToken");
+
+    if (!accessToken) {
+      setFlash({ message: "Reconnectez-vous pour enregistrer votre choix.", tone: "red" });
+      return;
+    }
+
+    setIsSubmittingChoice(true);
+
+    try {
+      const response = await registerSupportCaseFinalChoice(accessToken, supportCaseId, {
+        finalChoice,
+        digitalSupportRating: 8,
+      });
+
+      startTransition(() => {
+        setDetail(response);
+        setFlash({
+          message:
+            finalChoice === "DIGITAL_SUPPORT"
+              ? "Votre choix de conserver le titre en digital a ete enregistre."
+              : "Votre demande de reactivation du pass physique a ete enregistree.",
+          tone: "green",
+        });
+      });
+    } catch (error) {
+      setFlash({
+        message: error instanceof Error ? error.message : "Le choix n'a pas pu etre enregistre.",
+        tone: "red",
+      });
+    } finally {
+      setIsSubmittingChoice(false);
+    }
+  }
+
   if (!detail) {
     return (
       <DashboardLayout
@@ -112,8 +149,8 @@ export default function SupportCaseDetailPage() {
       title="Suivi SOS Navigo"
       userName="Mon espace"
     >
-      <div className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
-        <div className="grid gap-6">
+      <div className="grid items-start gap-8 lg:grid-cols-[1fr_0.9fr]">
+        <div className="grid auto-rows-max gap-6 self-start">
           {flash ? <InfoBox tone={flash.tone}>{flash.message}</InfoBox> : null}
 
           <section className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
@@ -236,15 +273,36 @@ export default function SupportCaseDetailPage() {
                 </Button>
               </div>
             </section>
-          ) : detail.status === "PASS_FOUND_WAITING_PICKUP" ? (
-            <InfoBox tone="green">
-              Votre pass est disponible au guichet {detail.foundDeskName ?? detail.foundLocation ?? "indique"}.
-              Utilisez le bandeau de votre tableau de bord si vous souhaitez conserver le titre en digital.
-            </InfoBox>
-          ) : detail.status === "PASS_PICKED_UP" ? (
-            <InfoBox tone="green">
-              Votre pass a ete marque recupere au guichet. Utilisez le bandeau de votre tableau de bord pour choisir le support final.
-            </InfoBox>
+          ) : detail.status === "PASS_FOUND_WAITING_PICKUP" || detail.status === "PASS_PICKED_UP" ? (
+            <section className="rounded-2xl border border-neutral-light bg-white p-5 shadow-sm">
+              <InfoBox tone="green">
+                Votre pass est disponible au guichet {detail.foundDeskName ?? detail.foundLocation ?? "indique"}.
+                Vous pouvez garder votre titre en digital si vous ne souhaitez pas reactiver le support physique.
+              </InfoBox>
+              <InfoBox className="mt-4" tone="orange">
+                La recuperation physique du pass doit etre confirmee par un agent au guichet.
+                Un agent devra declarer le pass comme recupere ou cloturer le dossier depuis le guichet.
+              </InfoBox>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  disabled={isSubmittingChoice}
+                  onClick={() => void handleFinalChoice("DIGITAL_SUPPORT")}
+                >
+                  Garder le titre en digital
+                </Button>
+                {detail.status === "PASS_PICKED_UP" ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isSubmittingChoice}
+                    onClick={() => void handleFinalChoice("PHYSICAL_PASS_REACTIVATION")}
+                  >
+                    Demander la reactivation du pass physique
+                  </Button>
+                ) : null}
+              </div>
+            </section>
           ) : (
             <InfoBox>
               Cette declaration ne peut plus etre annulee car elle a deja ete traitee ou annulee.

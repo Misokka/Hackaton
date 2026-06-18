@@ -13,6 +13,28 @@ type FamilyMembersSectionProps = {
   description?: string;
 };
 
+function getAgeLabel(birthDate: string | null) {
+  if (!birthDate) {
+    return null;
+  }
+
+  const birth = new Date(`${birthDate}T00:00:00`);
+
+  if (Number.isNaN(birth.getTime())) {
+    return null;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? `${age} ans` : null;
+}
+
 function getMemberBadges(member: DashboardMember) {
   const baseBadge =
     member.profileType === "MANAGER"
@@ -24,6 +46,11 @@ function getMemberBadges(member: DashboardMember) {
           : "Profil";
 
   const badges = [baseBadge];
+  const ageLabel = getAgeLabel(member.birthDate);
+
+  if (ageLabel) {
+    badges.push(ageLabel);
+  }
 
   if (member.isPayer) {
     badges.push("Payeur");
@@ -107,32 +134,34 @@ export function FamilyMembersSection({
       </div>
 
       <div id={cardsId} className="mt-6 grid gap-5 xl:grid-cols-3">
-        {members.map((member) => (
-          <ProfileSummaryCard
-            key={member.id}
-            badges={getMemberBadges(member)}
-            currentProduct={member.currentProduct ?? member.recommendedProduct}
-            description={member.nextAction}
-            icon={getProfileVisual(member.profileType)}
-            meta={[
-              member.payerName ? `Payeur : ${member.payerName}` : "Payeur a definir",
-              member.relationLabel,
-            ]}
-            name={`${member.firstName} ${member.lastName}`}
-            status={<StatusBadge status={member.status} />}
-            subtitle={member.relationLabel}
-            actions={(
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Link href={getPrimaryAction(member)} className="contents">
-                  <Button type="button">{getPrimaryLabel(member)}</Button>
-                </Link>
-                <Link href={getSecondaryHref(member)} className="contents">
-                  <Button type="button" variant="secondary">{getSecondaryLabel(member)}</Button>
-                </Link>
-              </div>
-            )}
-          />
-        ))}
+        {members.map((member) => {
+          return (
+            <ProfileSummaryCard
+              key={member.id}
+              badges={getMemberBadges(member)}
+              currentProduct={member.currentProduct ?? member.recommendedProduct}
+              description={member.nextAction}
+              icon={getProfileVisual(member.profileType)}
+              meta={[
+                member.payerName ? `Payeur : ${member.payerName}` : "Payeur a definir",
+                member.relationLabel,
+              ]}
+              name={`${member.firstName} ${member.lastName}`}
+              status={<StatusBadge status={member.status} />}
+              subtitle={member.relationLabel}
+              actions={(
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Link href={getPrimaryAction(member)} className="contents">
+                    <Button type="button">{getPrimaryLabel(member)}</Button>
+                  </Link>
+                  <Link href={getSecondaryHref(member)} className="contents">
+                    <Button type="button" variant="secondary">{getSecondaryLabel(member)}</Button>
+                  </Link>
+                </div>
+              )}
+            />
+          );
+        })}
       </div>
     </section>
   );

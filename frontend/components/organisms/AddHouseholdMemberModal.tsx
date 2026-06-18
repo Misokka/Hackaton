@@ -41,7 +41,7 @@ const emptyDraft: Draft = {
 
 const memberFieldClassName = "h-16";
 const memberSelectClassName =
-  "mt-2 h-16 w-full rounded-md border border-neutral-medium bg-white px-4 text-base font-semibold text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
+  "mt-2 h-16 w-full appearance-none rounded-md border border-neutral-medium bg-white px-4 text-base text-idfm-anthracite outline-none transition focus:border-idfm-focus focus:ring-3 focus:ring-idfm-medium";
 
 function getAge(birthDate: string) {
   if (!birthDate) return null;
@@ -70,8 +70,10 @@ function SelectField({
   value: string;
 }) {
   return (
-    <label className="block w-full text-xs font-bold uppercase tracking-wide text-neutral-medium">
-      <span>{label}</span>
+    <div className="w-full">
+      <label className="text-xs font-bold uppercase tracking-wide text-neutral-medium">
+        {label}
+      </label>
       <select
         className={memberSelectClassName}
         onChange={(event) => onChange(event.target.value)}
@@ -79,7 +81,7 @@ function SelectField({
       >
         {children}
       </select>
-    </label>
+    </div>
   );
 }
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { InfoBox } from "@/components/molecules/InfoBox";
+import { TablePagination } from "@/components/molecules/TablePagination";
 import { DashboardLayout } from "@/components/templates/DashboardLayout";
 import {
   destroyAdminSosNavigoPass,
@@ -30,6 +31,7 @@ import {
   supportCaseStatusLabels,
   supportCaseStatusTones,
 } from "@/lib/supportCases";
+import { paginateItems } from "@/lib/pagination";
 
 type StoredUser = {
   firstName?: string;
@@ -40,13 +42,16 @@ type StoredUser = {
 const filterLabels: Record<AdminSosFilter, string> = {
   all: "Toutes",
   active: "En cours",
-  transfer: "Transfert telephone",
-  deactivation: "Desactivation",
+  transfer: "Numerique temporaire",
+  deactivation: "Nouvelle carte",
+  "digital-final": "Numerique definitif",
   found: "Pass retrouve",
   "waiting-pickup": "Attente recuperation",
   closed: "Cloture",
   cancelled: "Annule",
 };
+
+const PAGE_SIZE = 10;
 
 function parseStoredUser(value: string | null): StoredUser | null {
   if (!value) return null;
@@ -247,13 +252,15 @@ function CaseModal({
               <div className="mt-4 flex flex-wrap gap-3">
                 {supportCase.status === "PASS_FOUND_WAITING_PICKUP" ? (
                   <>
-                    <Button type="button" variant="secondary" disabled={isBusy || !supportCase.household} onClick={onNotify}>
-                      Notifier client
-                    </Button>
+                    {!supportCase.clientNotifiedAt ? (
+                      <Button type="button" variant="secondary" disabled={isBusy} onClick={onNotify}>
+                        Notifier le client
+                      </Button>
+                    ) : null}
                     <Button type="button" disabled={isBusy} onClick={onPickedUp}>
                       Marquer recupere au guichet
                     </Button>
-                    <Button type="button" variant="ghost" disabled={isBusy} onClick={() => onFinalChoice("DIGITAL_SUPPORT")}>
+                    <Button type="button" variant="secondary" disabled={isBusy} onClick={() => onFinalChoice("DIGITAL_SUPPORT")}>
                       Client reste en digital
                     </Button>
                   </>
@@ -278,7 +285,7 @@ function CaseModal({
 
                 {["TRANSFER_TO_PHONE_REQUESTED", "PASS_DEACTIVATION_REQUESTED"].includes(supportCase.status) ? (
                   <InfoBox className="w-full" tone="blue">
-                    Pour faire evoluer ce dossier, utilisez le formulaire “Enregistrer un pass retrouve” avec le numero masque et le guichet.
+                    Pour faire evoluer ce dossier, utilisez le formulaire “Enregistrer un pass retrouve” avec le numero Navigo et le guichet.
                   </InfoBox>
                 ) : null}
 
@@ -314,6 +321,7 @@ export default function AdminSosNavigoPage() {
   const [passNumber, setPassNumber] = useState("");
   const [deskName, setDeskName] = useState("");
   const [selectedCase, setSelectedCase] = useState<AdminSupportCase | null>(null);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "green" | "red" | "orange"; text: string } | null>(null);
@@ -322,6 +330,7 @@ export default function AdminSosNavigoPage() {
     if (!storedUser) return "Back-office";
     return `${storedUser.firstName ?? ""} ${storedUser.lastName ?? ""}`.trim() || "Back-office";
   }, [storedUser]);
+  const casesPagination = paginateItems(cases, page, PAGE_SIZE);
 
   const refreshCases = useCallback(async (
     accessToken = getAccessToken(),
@@ -337,6 +346,7 @@ export default function AdminSosNavigoPage() {
     startTransition(() => {
       setDashboard(dashboardResponse);
       setCases(casesResponse);
+      setPage(1);
     });
   }, []);
 
@@ -436,7 +446,7 @@ export default function AdminSosNavigoPage() {
       ]}
       showTabs={false}
       subtitle="Suivi des pertes, passes retrouves, notifications client et recuperations au guichet."
-      summaryItems={["Dossiers SOS Navigo", "Matching par pass masque", "Actions agent"]}
+      summaryItems={["Dossiers SOS Navigo", "Recherche par numero Navigo", "Actions agent"]}
       title="SOS Navigo agent"
       userName={userName}
     >
@@ -463,14 +473,14 @@ export default function AdminSosNavigoPage() {
         <section className="grid gap-4 rounded-md border border-neutral-light bg-white p-4 shadow-sm lg:grid-cols-[1fr_360px]">
           <div>
             <label className="text-sm font-bold text-idfm-anthracite" htmlFor="sos-search">
-              Recherche dossier, client, profil, pass masque
+              Recherche dossier, client, profil, numero Navigo
             </label>
             <input
               id="sos-search"
               className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Sophie, Lucas, SOS-2026, CF-..., ****1234"
+              placeholder="Sophie, Lucas, SOS-2026, CF-..., 0 660 654 567 R"
             />
             <div className="mt-4 flex flex-wrap gap-2">
               {(Object.keys(filterLabels) as AdminSosFilter[]).map((candidate) => (
@@ -493,14 +503,14 @@ export default function AdminSosNavigoPage() {
           <form className="rounded-md border border-neutral-light bg-neutral-xlight p-4" onSubmit={handleFoundPassSubmit}>
             <h2 className="font-bold text-idfm-anthracite">Enregistrer un pass retrouve</h2>
             <label className="mt-4 block text-sm font-semibold text-neutral-medium" htmlFor="found-pass-number">
-              Numero ou pass masque
+              Numero Navigo complet
             </label>
             <input
               id="found-pass-number"
               className="mt-2 min-h-12 w-full rounded-md border border-neutral-light px-4 text-sm outline-none focus:border-idfm-interaction focus:ring-2 focus:ring-idfm-medium"
               value={passNumber}
               onChange={(event) => setPassNumber(event.target.value)}
-              placeholder="****1234"
+              placeholder="0 660 654 567 R"
               required
             />
             <label className="mt-4 block text-sm font-semibold text-neutral-medium" htmlFor="found-desk">
@@ -546,14 +556,14 @@ export default function AdminSosNavigoPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-light">
-                  {cases.map((supportCase) => (
+                  {casesPagination.items.map((supportCase) => (
                     <tr key={supportCase.id} className="align-top hover:bg-idfm-light/50">
                       <td className="px-4 py-4 font-semibold text-idfm-anthracite">{supportCase.dossierNumber}</td>
                       <td className="px-4 py-4">
                         <p className="font-semibold text-idfm-anthracite">{personName(supportCase.member)}</p>
                         <p className="mt-1 text-xs text-neutral-medium">{supportCase.household?.customerNumber ?? "Non rattache"}</p>
                       </td>
-                      <td className="px-4 py-4 font-mono text-idfm-anthracite">{supportCase.passNumberMasked ?? "****"}</td>
+                      <td className="px-4 py-4 font-mono text-idfm-anthracite">{supportCase.passNumberMasked ?? "numero indisponible"}</td>
                       <td className="px-4 py-4">
                         <Badge tone={supportCaseStatusTones[supportCase.status]}>{supportCaseStatusLabels[supportCase.status]}</Badge>
                       </td>
@@ -577,6 +587,17 @@ export default function AdminSosNavigoPage() {
               />
             </div>
           )}
+          {cases.length ? (
+            <TablePagination
+              page={casesPagination.page}
+              pageCount={casesPagination.pageCount}
+              start={casesPagination.start + 1}
+              end={casesPagination.end}
+              total={casesPagination.total}
+              onPrevious={() => setPage((current) => Math.max(current - 1, 1))}
+              onNext={() => setPage((current) => Math.min(current + 1, casesPagination.pageCount))}
+            />
+          ) : null}
         </section>
       </div>
 

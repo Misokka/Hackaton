@@ -6,6 +6,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type {
+  Prisma,
+  NavigoPassStatus,
+  NavigoPassSupportType,
   HouseholdMember,
   Subscription,
   SupportCase,
@@ -13,6 +16,7 @@ import type {
   SupportCaseStatus,
 } from "@prisma/client";
 import { PrismaService } from "src/prisma/prisma.service";
+import { buildNavigoNumber, formatNavigoNumber } from "src/navigo-passes/navigo-number.util";
 import { CreateFoundPassDto } from "./dtos/create-found-pass.dto";
 import { CreateLostPassDto } from "./dtos/create-lost-pass.dto";
 
@@ -33,6 +37,7 @@ const CLOSED_LOST_PASS_STATUSES: SupportCaseStatus[] = [
   "RESOLVED",
   "CANCELLED_BY_USER",
   "DIGITAL_SUPPORT_CONFIRMED",
+  "PERMANENT_DIGITAL_TRANSFER_REQUESTED",
   "PHYSICAL_PASS_REACTIVATION_REQUESTED",
   "PHYSICAL_PASS_REACTIVATED",
 ];
@@ -40,23 +45,6 @@ const CLOSED_LOST_PASS_STATUSES: SupportCaseStatus[] = [
 @Injectable()
 export class SupportCasesService {
   constructor(private readonly prismaService: PrismaService) {}
-
-  private maskPassNumber(passNumber: string) {
-    const sanitized = passNumber.replace(/\s+/g, "");
-    const visiblePart = sanitized.slice(-4);
-    return `${"*".repeat(Math.max(0, sanitized.length - 4))}${visiblePart}`;
-  }
-
-  // MVP : aucun vrai numero de pass n'est stocke. On derive un numero masque
-  // stable et lisible a partir de l'id membre, uniquement pour l'affichage.
-  private buildMaskedPassForMember(memberId: string) {
-    let hash = 0;
-    for (const char of memberId) {
-      hash = (hash * 31 + char.charCodeAt(0)) % 100000;
-    }
-    const lastFour = (hash % 10000).toString().padStart(4, "0");
-    return `**** ${lastFour}`;
-  }
 
   // Numero de dossier affichable, ex : SOS-2026-0041
   private buildDossierNumber(supportCase: { id: string; createdAt: Date }) {
@@ -66,9 +54,15 @@ export class SupportCasesService {
   }
 
   private resolutionToStatus(resolution: SupportCaseResolution): SupportCaseStatus {
-    return resolution === "TRANSFER_TO_PHONE"
-      ? "TRANSFER_TO_PHONE_REQUESTED"
-      : "PASS_DEACTIVATION_REQUESTED";
+    if (resolution === "TRANSFER_TO_PHONE" || resolution === "TEMPORARY_DIGITAL_TRANSFER") {
+      return "TRANSFER_TO_PHONE_REQUESTED";
+    }
+
+    if (resolution === "PERMANENT_DIGITAL_TRANSFER") {
+      return "PERMANENT_DIGITAL_TRANSFER_REQUESTED";
+    }
+
+    return "PASS_DEACTIVATION_REQUESTED";
   }
 
   private statusLabel(status: SupportCaseStatus) {
@@ -78,9 +72,11 @@ export class SupportCasesService {
       case "IN_PROGRESS":
         return "En cours de traitement";
       case "TRANSFER_TO_PHONE_REQUESTED":
-        return "Transfert telephone demande";
+        return "Transfert numerique temporaire demande";
       case "PASS_DEACTIVATION_REQUESTED":
-        return "Desactivation demandee";
+        return "Nouvelle carte demandee";
+      case "PERMANENT_DIGITAL_TRANSFER_REQUESTED":
+        return "Passage definitif en numerique";
       case "PASS_FOUND_WAITING_PICKUP":
         return "Pass retrouve";
       case "PASS_PICKED_UP":
@@ -107,9 +103,11 @@ export class SupportCasesService {
       case "IN_PROGRESS":
         return "Un agent traite votre demande.";
       case "TRANSFER_TO_PHONE_REQUESTED":
-        return "Transfert du titre sur telephone en cours de preparation.";
+        return "Votre titre est disponible en numerique en attendant un eventuel retour du pass.";
       case "PASS_DEACTIVATION_REQUESTED":
-        return "Desactivation du pass physique en cours de preparation.";
+        return "Une nouvelle carte est demandee pour remplacer le pass perdu.";
+      case "PERMANENT_DIGITAL_TRANSFER_REQUESTED":
+        return "Votre titre reste desormais sur support numerique.";
       case "PASS_FOUND_WAITING_PICKUP":
         return "Votre pass est disponible au guichet indique.";
       case "PASS_PICKED_UP":
@@ -136,6 +134,34 @@ export class SupportCasesService {
 
     const latestSubscription = member.subscriptions?.[0];
     return latestSubscription?.productName ?? null;
+  }
+
+  private async syncNavigoPassState(
+    tx: Prisma.TransactionClient,
+    input: {
+      memberId: string;
+      navigoNumber: string;
+      productName: string;
+      status: NavigoPassStatus;
+      supportType: NavigoPassSupportType;
+    },
+  ) {
+    await tx.navigoPass.upsert({
+      where: { householdMemberId: input.memberId },
+      update: {
+        navigoNumber: input.navigoNumber,
+        productName: input.productName,
+        status: input.status,
+        supportType: input.supportType,
+      },
+      create: {
+        householdMemberId: input.memberId,
+        navigoNumber: input.navigoNumber,
+        productName: input.productName,
+        status: input.status,
+        supportType: input.supportType,
+      },
+    });
   }
 
   private serializeSupportCase(supportCase: SupportCaseWithRelations) {
@@ -228,11 +254,12 @@ export class SupportCasesService {
       );
     }
 
-    const isTransfer = data.chosenResolution === "TRANSFER_TO_PHONE";
-    // Le support digital est active immediatement, mais le dossier reste ouvert
-    // jusqu'au choix final ou a la recuperation confirmee par un agent.
-    const status = isTransfer ? "TRANSFER_TO_PHONE_REQUESTED" : "PASS_DEACTIVATION_REQUESTED";
-    const passNumberMasked = this.buildMaskedPassForMember(member.id);
+    const isTemporaryTransfer = ["TRANSFER_TO_PHONE", "TEMPORARY_DIGITAL_TRANSFER"].includes(data.chosenResolution);
+    const isPermanentDigital = data.chosenResolution === "PERMANENT_DIGITAL_TRANSFER";
+    const wantsReplacementCard = ["DEACTIVATE_ONLY", "REPLACEMENT_CARD"].includes(data.chosenResolution);
+    const status = this.resolutionToStatus(data.chosenResolution);
+    const passNumberMasked = buildNavigoNumber(member.id);
+    const now = new Date();
 
     const createdCase = await this.prismaService.$transaction(async (tx) => {
       const supportCase = await tx.supportCase.create({
@@ -245,21 +272,34 @@ export class SupportCasesService {
           chosenResolution: data.chosenResolution,
           passNumberMasked,
           description: `Declaration de perte (${data.reason}).`,
+          finalChoice: isPermanentDigital ? "DIGITAL_SUPPORT" : null,
+          finalChoiceAt: isPermanentDigital ? now : null,
+          resolvedAt: isPermanentDigital ? now : null,
         },
       });
 
       await tx.subscription.update({
         where: { id: latestSubscription.id },
-        data: isTransfer
+        data: isTemporaryTransfer || isPermanentDigital
           ? {
               // Le titre reste valable, desormais disponible sur smartphone.
               status: "ACTIVE",
-              nextActionLabel: "Titre disponible sur smartphone temporairement",
+              nextActionLabel: isPermanentDigital
+                ? "Titre conserve sur support numerique"
+                : "Titre disponible sur smartphone temporairement",
             }
           : {
               status: "LOST",
-              nextActionLabel: "Suivre la demande de remplacement",
+              nextActionLabel: "Suivre la demande de nouvelle carte",
             },
+      });
+
+      await this.syncNavigoPassState(tx, {
+        memberId: member.id,
+        navigoNumber: passNumberMasked,
+        productName: latestSubscription.productName,
+        status: "ACTIVE",
+        supportType: isTemporaryTransfer || isPermanentDigital ? "DIGITAL" : "PHYSICAL",
       });
 
       await tx.familyNotification.create({
@@ -267,13 +307,17 @@ export class SupportCasesService {
           householdId: household.id,
           memberId: member.id,
           type: "SUPPORT_UPDATE",
-          severity: isTransfer ? "SUCCESS" : "WARNING",
-          title: isTransfer
-            ? `${member.firstName} — Titre transfere sur smartphone`
-            : `${member.firstName} — Passe perdu declare`,
-          message: isTransfer
-            ? "Le transfert sur smartphone a ete effectue. Le pass physique est desactive."
-            : "Demande enregistree. Vous pouvez suivre ou annuler le dossier depuis votre espace.",
+          severity: isTemporaryTransfer || isPermanentDigital ? "SUCCESS" : "WARNING",
+          title: isTemporaryTransfer
+            ? `${member.firstName} — Titre transfere temporairement en numerique`
+            : isPermanentDigital
+              ? `${member.firstName} — Passage definitif en numerique`
+              : `${member.firstName} — Nouvelle carte demandee`,
+          message: isTemporaryTransfer
+            ? "Le transfert numerique temporaire est actif. Une alerte sera affichee si le pass est retrouve."
+            : isPermanentDigital
+              ? "Le titre reste sur support numerique. Aucun nouveau pass physique n'est demande."
+              : "Le pass perdu est desactive. Une nouvelle carte est demandee pour remplacer le support perdu.",
         },
       });
 
@@ -281,9 +325,11 @@ export class SupportCasesService {
         data: {
           householdId: household.id,
           memberId: member.id,
-          label: isTransfer
-            ? `${member.firstName} a transfere son titre sur smartphone (passe perdu).`
-            : `${member.firstName} a signale une perte de passe.`,
+          label: isTemporaryTransfer
+            ? `${member.firstName} a demande un transfert numerique temporaire apres perte du pass.`
+            : isPermanentDigital
+              ? `${member.firstName} est passe definitivement au support numerique apres perte du pass.`
+              : `${member.firstName} a demande une nouvelle carte apres perte du pass.`,
         },
       });
 
@@ -291,9 +337,13 @@ export class SupportCasesService {
     });
 
     return {
-      message: isTransfer
-        ? "Le support digital temporaire est active. Votre pass physique est desactive."
-        : "Votre declaration de perte a ete enregistree.",
+      message: isTemporaryTransfer
+        ? "Le support numerique temporaire est active. Votre pass physique est considere comme perdu."
+        : isPermanentDigital
+          ? "Votre titre est maintenant conserve sur support numerique. Le dossier est cloture."
+          : wantsReplacementCard
+            ? "Votre pass est desactive et une demande de nouvelle carte a ete enregistree."
+            : "Votre declaration de perte a ete enregistree.",
       supportCase: {
         id: createdCase.id,
         type: createdCase.type,
@@ -426,6 +476,14 @@ export class SupportCasesService {
                 : null,
             },
           });
+
+          await this.syncNavigoPassState(tx, {
+            memberId: supportCase.memberId,
+            navigoNumber: supportCase.passNumberMasked ?? buildNavigoNumber(supportCase.memberId),
+            productName: subscription.productName,
+            status: "ACTIVE",
+            supportType: finalChoice === "DIGITAL_SUPPORT" ? "DIGITAL" : "PHYSICAL",
+          });
         }
       }
 
@@ -509,6 +567,14 @@ export class SupportCasesService {
               nextActionLabel: null,
             },
           });
+
+          await this.syncNavigoPassState(tx, {
+            memberId: supportCase.memberId,
+            navigoNumber: supportCase.passNumberMasked ?? buildNavigoNumber(supportCase.memberId),
+            productName: latestSubscription.productName,
+            status: "ACTIVE",
+            supportType: "PHYSICAL",
+          });
         }
 
         await tx.familyNotification.create({
@@ -546,7 +612,7 @@ export class SupportCasesService {
   }
 
   async createFoundPassCase(data: CreateFoundPassDto) {
-    const passNumberMasked = this.maskPassNumber(data.passNumber);
+    const passNumberMasked = formatNavigoNumber(data.passNumber);
     const supportCase = await this.prismaService.supportCase.create({
       data: {
         type: "FOUND_PASS",

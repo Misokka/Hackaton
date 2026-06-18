@@ -112,7 +112,7 @@ export function SosNavigoSection({ onDeclareLostPass, refreshSignal = 0 }: SosNa
             title="J'ai retrouve mon passe"
             description="Signalez un passe retrouve sans exposer son proprietaire."
             href="/found-pass"
-            imageSrc="/assets/illustrations/hand-holding-ticket.png"
+            imageSrc="/assets/logos/pictogrammes/generic-pass-card.png"
           />
         </div>
       </div>

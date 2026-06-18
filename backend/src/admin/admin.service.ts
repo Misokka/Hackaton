@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { buildNavigoNumber, formatNavigoNumber, normalizeNavigoNumber } from "src/navigo-passes/navigo-number.util";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateAdminFoundPassDto } from "./dtos/create-admin-found-pass.dto";
 import { FinalChoiceAdminSosCaseDto } from "./dtos/final-choice-admin-sos-case.dto";
@@ -48,16 +49,6 @@ export class AdminService {
     return `${person.firstName} ${person.lastName}`.trim();
   }
 
-  private maskPassNumber(passNumber: string) {
-    const sanitized = passNumber.replace(/[\s*-]/g, "");
-    const visiblePart = sanitized.slice(-4);
-    return `**** ${visiblePart}`;
-  }
-
-  private normalizePassNumber(passNumber: string | null) {
-    return (passNumber ?? "").replace(/[\s*-]/g, "").toLowerCase();
-  }
-
   private dossierNumber(supportCase: { id: string; createdAt: Date }) {
     const year = supportCase.createdAt.getFullYear();
     const segment = supportCase.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase();
@@ -72,11 +63,6 @@ export class AdminService {
     const year = request.createdAt.getFullYear();
     const segment = request.id.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase();
     return `SUB-${year}-${segment}`;
-  }
-
-  private buildNavigoNumber(memberId: string) {
-    const compact = memberId.replace(/-/g, "").toUpperCase();
-    return `NAV-${compact.slice(0, 4)}-${compact.slice(-4)}`;
   }
 
   private getAge(birthDate?: Date | null) {
@@ -215,6 +201,7 @@ export class AdminService {
       "RESOLVED",
       "CANCELLED_BY_USER",
       "DIGITAL_SUPPORT_CONFIRMED",
+      "PERMANENT_DIGITAL_TRANSFER_REQUESTED",
       "PHYSICAL_PASS_REACTIVATION_REQUESTED",
       "PHYSICAL_PASS_REACTIVATED",
     ].includes(status);
@@ -1300,7 +1287,7 @@ export class AdminService {
         where: { householdMemberId: existing.memberId },
         create: {
           householdMemberId: existing.memberId,
-          navigoNumber: this.buildNavigoNumber(existing.memberId),
+          navigoNumber: buildNavigoNumber(existing.memberId),
           productName: existing.offer.name,
           supportType: "PHYSICAL",
           status: "ACTIVE",
@@ -1492,8 +1479,12 @@ export class AdminService {
         activeCases: lostPassCases.filter((supportCase) => !this.isSosClosed(supportCase.status)).length,
         foundTodayCount: foundToday.length,
         waitingPickupCount: supportCases.filter((supportCase) => supportCase.status === "PASS_FOUND_WAITING_PICKUP").length,
-        transferToPhoneCount: lostPassCases.filter((supportCase) => supportCase.chosenResolution === "TRANSFER_TO_PHONE").length,
-        deactivationCount: lostPassCases.filter((supportCase) => supportCase.chosenResolution === "DEACTIVATE_ONLY").length,
+        transferToPhoneCount: lostPassCases.filter((supportCase) =>
+          ["TRANSFER_TO_PHONE", "TEMPORARY_DIGITAL_TRANSFER"].includes(supportCase.chosenResolution ?? ""),
+        ).length,
+        deactivationCount: lostPassCases.filter((supportCase) =>
+          ["DEACTIVATE_ONLY", "REPLACEMENT_CARD"].includes(supportCase.chosenResolution ?? ""),
+        ).length,
         closedCasesCount: closedCases.length,
         resolutionRate: lostPassCases.length ? Math.round((closedCases.length / lostPassCases.length) * 100) : 0,
         averageDelayHours,
@@ -1521,11 +1512,15 @@ export class AdminService {
           return false;
         }
 
-        if (filter === "transfer" && supportCase.chosenResolution !== "TRANSFER_TO_PHONE") {
+        if (filter === "transfer" && !["TRANSFER_TO_PHONE", "TEMPORARY_DIGITAL_TRANSFER"].includes(supportCase.chosenResolution ?? "")) {
           return false;
         }
 
-        if (filter === "deactivation" && supportCase.chosenResolution !== "DEACTIVATE_ONLY") {
+        if (filter === "deactivation" && !["DEACTIVATE_ONLY", "REPLACEMENT_CARD"].includes(supportCase.chosenResolution ?? "")) {
+          return false;
+        }
+
+        if (filter === "digital-final" && supportCase.chosenResolution !== "PERMANENT_DIGITAL_TRANSFER") {
           return false;
         }
 
@@ -1580,7 +1575,7 @@ export class AdminService {
   }
 
   async registerFoundPass(data: CreateAdminFoundPassDto) {
-    const passNumberMasked = this.maskPassNumber(data.passNumber);
+    const passNumberMasked = formatNavigoNumber(data.passNumber);
     const desk = this.pickDesk(data.deskName);
     const foundAt = new Date();
     const activeLostCases = await this.prismaService.supportCase.findMany({
@@ -1592,6 +1587,7 @@ export class AdminService {
             "CANCELLED_BY_USER",
             "PASS_PICKED_UP",
             "DIGITAL_SUPPORT_CONFIRMED",
+            "PERMANENT_DIGITAL_TRANSFER_REQUESTED",
             "PHYSICAL_PASS_REACTIVATION_REQUESTED",
             "PHYSICAL_PASS_REACTIVATED",
           ],
@@ -1607,9 +1603,9 @@ export class AdminService {
       },
       orderBy: { createdAt: "desc" },
     });
-    const normalizedPassNumber = this.normalizePassNumber(passNumberMasked);
+    const normalizedPassNumber = normalizeNavigoNumber(passNumberMasked);
     const matchedCase = activeLostCases.find(
-      (supportCase) => this.normalizePassNumber(supportCase.passNumberMasked) === normalizedPassNumber,
+      (supportCase) => normalizeNavigoNumber(supportCase.passNumberMasked) === normalizedPassNumber,
     );
 
     if (matchedCase) {
@@ -1886,6 +1882,23 @@ export class AdminService {
               nextActionLabel: data.finalChoice === "DIGITAL_SUPPORT"
                 ? "Titre conserve sur smartphone"
                 : null,
+            },
+          });
+
+          await tx.navigoPass.upsert({
+            where: { householdMemberId: supportCase.memberId },
+            update: {
+              navigoNumber: supportCase.passNumberMasked ?? buildNavigoNumber(supportCase.memberId),
+              productName: subscription.productName,
+              status: "ACTIVE",
+              supportType: data.finalChoice === "DIGITAL_SUPPORT" ? "DIGITAL" : "PHYSICAL",
+            },
+            create: {
+              householdMemberId: supportCase.memberId,
+              navigoNumber: supportCase.passNumberMasked ?? buildNavigoNumber(supportCase.memberId),
+              productName: subscription.productName,
+              status: "ACTIVE",
+              supportType: data.finalChoice === "DIGITAL_SUPPORT" ? "DIGITAL" : "PHYSICAL",
             },
           });
         }
