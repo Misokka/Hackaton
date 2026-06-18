@@ -74,7 +74,6 @@ function SubscriptionConfirmationContent() {
   }, [params.id]);
 
   const userName = request?.payer.firstName ?? "Mon espace";
-  const statusLabel = request ? getSubscriptionRequestStatusLabel(request.status) : null;
   const renewal = request?.renewal ?? emptyRenewal;
 
   async function handleCancelRenewal() {
@@ -100,6 +99,7 @@ function SubscriptionConfirmationContent() {
     }
   }
   const isDraft = request?.status === "DRAFT";
+  const requestStatusLabel = request ? getSubscriptionRequestStatusLabel(request.status) : "";
 
   return (
     <DashboardLayout
@@ -111,7 +111,7 @@ function SubscriptionConfirmationContent() {
         { label: "Confirmation" },
       ]}
       subtitle="Votre demande est enregistree et suivie dans l'espace famille."
-      summaryItems={request ? [request.offer.name, statusLabel ?? "En cours", `Porteur : ${request.member.firstName}`] : ["Suivi de demande"]}
+      summaryItems={request ? [request.offer.name, requestStatusLabel, `Porteur : ${request.member.firstName}`] : ["Suivi de demande"]}
       title="Demande envoyee"
       userName={userName}
     >
@@ -150,7 +150,7 @@ function SubscriptionConfirmationContent() {
               </div>
               <div className="rounded-2xl bg-idfm-light p-4">
                 <p className="text-neutral-medium">Statut</p>
-                <p className="font-bold text-idfm-anthracite">{statusLabel}</p>
+                <p className="font-bold text-idfm-anthracite">{requestStatusLabel}</p>
               </div>
             </div>
           </section>
