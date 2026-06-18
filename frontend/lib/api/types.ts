@@ -218,6 +218,34 @@ export type HouseholdDashboardResponse = {
   recentActivity: RecentActivityItem[];
 };
 
+export type HouseholdProcedureType =
+  | "SUBSCRIPTION"
+  | "RENEWAL"
+  | "SOS_NAVIGO"
+  | "FOUND_PASS"
+  | "SUPPORT_SWITCH"
+  | "DOCUMENT"
+  | "PAYMENT";
+
+export type HouseholdProcedure = {
+  id: string;
+  profileName: string;
+  profileId: string | null;
+  type: HouseholdProcedureType;
+  title: string;
+  relatedTitle: string | null;
+  status: string;
+  statusLabel: string;
+  createdAt: string;
+  updatedAt: string;
+  nextAction: string;
+  detailUrl: string;
+};
+
+export type HouseholdProceduresResponse = {
+  procedures: HouseholdProcedure[];
+};
+
 export type MemberDetailAction = {
   label: string;
   href?: string;
