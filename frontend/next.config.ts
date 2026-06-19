@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const isCapacitorBuild = process.env.CAPACITOR_BUILD === "1";
+const isStaticCapacitorExport = process.env.CAPACITOR_STATIC_EXPORT === "1";
 
 const allowedOrigins = [
   "localhost:3000",
@@ -23,13 +24,16 @@ if (process.env.NEXT_OUTPUT_WSS_PROXY) {
 }
 
 const nextConfig: NextConfig = {
-  output: isCapacitorBuild ? "export" : undefined,
+  // Le projet iOS Capacitor utilise une URL distante configurée côté app.
+  // On n'active l'export statique que si c'est explicitement demandé, car
+  // plusieurs routes dynamiques du dashboard famille ne sont pas exportables.
+  output: isCapacitorBuild && isStaticCapacitorExport ? "export" : undefined,
 
   turbopack: {
     root: process.cwd(),
   },
 
-  images: isCapacitorBuild
+  images: isCapacitorBuild && isStaticCapacitorExport
     ? {
         unoptimized: true,
       }

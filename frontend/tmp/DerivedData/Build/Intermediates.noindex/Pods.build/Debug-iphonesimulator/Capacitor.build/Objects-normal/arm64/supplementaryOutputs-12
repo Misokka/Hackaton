@@ -1,0 +1,37 @@
+{
+  "/Users/jeremy/Hackaton/frontend/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPPlugin+LoadInstance.swift" : {
+    "const-values" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPlugin+LoadInstance.swiftconstvalues",
+    "dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPlugin+LoadInstance.d",
+    "diagnostics" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPlugin+LoadInstance.dia",
+    "object" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPlugin+LoadInstance.o",
+    "swift-dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPlugin+LoadInstance.swiftdeps"
+  },
+  "/Users/jeremy/Hackaton/frontend/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPPluginCall.swift" : {
+    "const-values" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginCall-45ed1848534ce2419f16b61c10c53c64.swiftconstvalues",
+    "dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginCall-45ed1848534ce2419f16b61c10c53c64.d",
+    "diagnostics" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginCall-45ed1848534ce2419f16b61c10c53c64.dia",
+    "object" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginCall-45ed1848534ce2419f16b61c10c53c64.o",
+    "swift-dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginCall-45ed1848534ce2419f16b61c10c53c64.swiftdeps"
+  },
+  "/Users/jeremy/Hackaton/frontend/node_modules/@capacitor/ios/Capacitor/Capacitor/CAPPluginMethod.swift" : {
+    "const-values" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginMethod-0a8ad0947695d88b4d3c0997fef7ba61.swiftconstvalues",
+    "dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginMethod-0a8ad0947695d88b4d3c0997fef7ba61.d",
+    "diagnostics" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginMethod-0a8ad0947695d88b4d3c0997fef7ba61.dia",
+    "object" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginMethod-0a8ad0947695d88b4d3c0997fef7ba61.o",
+    "swift-dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/CAPPluginMethod-0a8ad0947695d88b4d3c0997fef7ba61.swiftdeps"
+  },
+  "/Users/jeremy/Hackaton/frontend/node_modules/@capacitor/ios/Capacitor/Capacitor/Data+Capacitor.swift" : {
+    "const-values" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Data+Capacitor.swiftconstvalues",
+    "dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Data+Capacitor.d",
+    "diagnostics" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Data+Capacitor.dia",
+    "object" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Data+Capacitor.o",
+    "swift-dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Data+Capacitor.swiftdeps"
+  },
+  "/Users/jeremy/Hackaton/frontend/node_modules/@capacitor/ios/Capacitor/Capacitor/Plugins/Console.swift" : {
+    "const-values" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Console.swiftconstvalues",
+    "dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Console.d",
+    "diagnostics" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Console.dia",
+    "object" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Console.o",
+    "swift-dependencies" : "/Users/jeremy/Hackaton/frontend/tmp/DerivedData/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/Capacitor.build/Objects-normal/arm64/Console.swiftdeps"
+  }
+}
