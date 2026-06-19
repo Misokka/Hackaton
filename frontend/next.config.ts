@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === "1";
+
 const allowedOrigins = [
   "localhost:3000",
   "localhost:3001",
@@ -21,9 +23,17 @@ if (process.env.NEXT_OUTPUT_WSS_PROXY) {
 }
 
 const nextConfig: NextConfig = {
+  output: isCapacitorBuild ? "export" : undefined,
+
   turbopack: {
     root: process.cwd(),
   },
+
+  images: isCapacitorBuild
+    ? {
+        unoptimized: true,
+      }
+    : undefined,
 
   allowedDevOrigins: allowedOrigins,
 
