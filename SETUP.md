@@ -4,13 +4,13 @@
 
 ### Pour la bdd
 
-- Renommer .env.example en .env
+- renommer le fichier .env.example > .env
+- Renommer les frontend/.env.example > .env
+- Renommer les backend/.env.example > .env
 
 - Changer les variables et les faire correspondre dans le DATABASE_URL
 
 - Lancer la commande `docker compose up --build -d`
-
-- Lancer la commande `npm install`
 
 - Lancer la commande `docker exec -it backend npx prisma migrate deploy`
 
